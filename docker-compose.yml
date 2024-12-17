@@ -1,0 +1,38 @@
+version: '3.8'
+services:
+  restack-engine:
+    image: ghcr.io/restackio/restack:main
+    container_name: restack
+    ports:
+      - "5233:5233"
+      - "6233:6233"
+      - "7233:7233"
+    restart: always
+
+  docker-dind:
+    image: docker:24-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    ports:
+      - "2375:2375"
+
+  backend:
+    build: ./backend
+    environment:
+      - OPENAI_KEY=${OPENAI_KEY}
+      - DOCKER_HOST=tcp://docker-dind:2375
+    depends_on:
+      - restack-engine
+      - docker-dind
+    ports:
+      - "8000:8000"
+    command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    command: ["npm", "run", "dev"]
