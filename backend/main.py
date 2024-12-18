@@ -54,7 +54,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.post("/run_workflow")
 async def run_workflow(params: UserInput):
     # In local dev mode, Restack tries RESTACK_ENGINE_ADDRESS if set.
-    # Ensure RESTACK_ENGINE_ADDRESS=http://restack-engine:6233 is set in docker-compose environment.
+    # Ensure RESTACK_ENGINE_ADDRESS=http://restack_engine:6233 is set in docker-compose environment.
 
     try:
         # No arguments means local dev mode using RESTACK_ENGINE_ADDRESS
