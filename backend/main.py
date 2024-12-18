@@ -48,16 +48,16 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.post("/run_workflow")
 async def run_workflow(params: UserInput):
-    connection_options = CloudConnectionOptions(
-        engine_id="local",
-        api_key=None,
-        address="restack-engine:7233",
-        api_address="restack-engine:6233/api",
-        temporal_namespace="default"
-    )
+    # connection_options = CloudConnectionOptions(
+    #     engine_id="local",
+    #     api_key=None,
+    #     address="restack-engine:7233",
+    #     api_address="restack-engine:6233/api",
+    #     temporal_namespace="default"
+    # )
 
-    # Initialize Restack with these options
-    client = Restack(options=connection_options)
+    # Initialize Restack with these options options=connection_options
+    client = Restack()
     try:
         workflow_id = f"{int(time.time() * 1000)}-AutonomousCodingWorkflow"
         runId = await client.schedule_workflow(
