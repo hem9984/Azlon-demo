@@ -21,7 +21,6 @@ services:
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
       - DOCKER_HOST=tcp://docker-dind:2375
-      # RESTACK_ENGINE_ADDRESS might not be used by the given code, but we leave it anyway
       - RESTACK_ENGINE_ADDRESS=http://restack-engine:6233
     depends_on:
       - restack-engine
@@ -29,6 +28,18 @@ services:
     ports:
       - "8000:8000"
     command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  worker:
+    build: ./backend
+    environment:
+      - OPENAI_KEY=${OPENAI_KEY}
+      - DOCKER_HOST=tcp://docker-dind:2375
+      - RESTACK_ENGINE_ADDRESS=http://restack-engine:6233
+    depends_on:
+      - restack-engine
+      - docker-dind
+      - backend
+    command: ["poetry", "run", "python", "src/services.py"]
 
   frontend:
     build: ./frontend
