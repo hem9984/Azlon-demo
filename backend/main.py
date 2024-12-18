@@ -49,7 +49,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.post("/run_workflow")
 async def run_workflow(params: UserInput):
     connection_options = CloudConnectionOptions(
-        engine_id=None,
+        engine_id="local",
         api_key=None,
         address="restack-engine:7233",
         api_address="restack-engine:6233",
