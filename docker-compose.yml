@@ -46,7 +46,7 @@ services:
       - restack-engine
       - docker-dind
       - backend
-    command: ["poetry", "run", "python", "-m", "src.services"]
+    command: ["sh", "-c", "sleep 10 && poetry run python -m src.services"]
     networks:
       - restack-network
 
