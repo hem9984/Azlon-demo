@@ -1,5 +1,5 @@
 services:
-  restack_engine:
+  restack:
     image: ghcr.io/restackio/restack:main
     container_name: restack
     ports:
@@ -21,11 +21,11 @@ services:
     build: ./backend
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
-      - RESTACK_ENGINE_ADDRESS=http://restack_engine:6233
+      - RESTACK_ENGINE_ADDRESS=http://restack:6233
       # If you still need the Docker host for build steps inside backend:
       - DOCKER_HOST=tcp://docker-dind:2375
     depends_on:
-      - restack_engine
+      - restack
       - docker-dind
     ports:
       - "8000:8000"
