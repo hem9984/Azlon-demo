@@ -5,10 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import time
+import os
 
 from src.prompts import get_prompts, set_prompts
 from restack_ai import Restack
 from restack_ai.restack import CloudConnectionOptions
+
+RESTACK_ENGINE_ADDRESS = os.getenv('RESTACK_ENGINE_ADDRESS', 'restack-engine:6233')
+RESTACK_TEMPORAL_ADDRESS = os.getenv('RESTACK_TEMPORAL_ADDRESS', 'restack-engine:7233')
 
 app = FastAPI()
 
@@ -48,13 +52,12 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.post("/run_workflow")
 async def run_workflow(params: UserInput):
-    # connection_options = CloudConnectionOptions(
-    #     engine_id="local",
-    #     api_key=None,
-    #     address="restack-engine:7233",
-    #     api_address="restack-engine:6233/api",
-    #     temporal_namespace="default"
-    # )
+    connection_options = CloudConnectionOptions(
+    engine_id="local",
+    api_key=None,
+    address=RESTACK_TEMPORAL_ADDRESS,
+    api_address=RESTACK_ENGINE_ADDRESS,
+    temporal_namespace="default")
 
     # Initialize Restack with these options options=connection_options
     client = Restack()
