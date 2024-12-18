@@ -48,14 +48,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.post("/run_workflow")
 async def run_workflow(params: UserInput):
-    # Use CloudConnectionOptions with dummy engine_id and api_key
-    # We know from the code snippet that engine_id and api_key are required fields
-    # We'll set engine_id="local" and api_key="local" just to satisfy requirements.
-    # address should point to Temporal endpoint (7233)
-    # api_address should point to Restack RPC endpoint (6233)
-    # This may enable TLS since api_key is not None, if that fails, consider modifying Restack code to allow no TLS.
     connection_options = CloudConnectionOptions(
-        engine_id="local",
+        engine_id=None,
         api_key=None,
         address="restack-engine:7233",
         api_address="restack-engine:6233",
