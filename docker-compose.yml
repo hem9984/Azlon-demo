@@ -25,7 +25,7 @@ services:
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
       - DOCKER_HOST=tcp://docker-dind:2375
-      - RESTACK_ENGINE_ADDRESS=http://restack-engine:6233
+      - RESTACK_ENGINE_ADDRESS=restack-engine:6233
     depends_on:
       - restack-engine
       - docker-dind
