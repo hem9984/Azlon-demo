@@ -3,7 +3,7 @@ import { useToast } from "@/components/ui/use-toast";
 import WorkflowForm from '@/components/WorkflowForm';
 import ResultDisplay from '@/components/ResultDisplay';
 
-const API_URL = "http://localhost:3000";
+const API_URL = "http://localhost:8000";
 
 const Index = () => {
   const [userPrompt, setUserPrompt] = useState("");
