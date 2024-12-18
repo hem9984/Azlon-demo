@@ -7,6 +7,8 @@ services:
       - "6233:6233" # RPC
       - "7233:7233" # Temporal
     restart: always
+    networks:
+      - restack-network
 
   docker-dind:
     image: docker:24-dind
@@ -15,6 +17,8 @@ services:
     command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
     ports:
       - "2375:2375"
+    networks:
+      - restack-network
 
   backend:
     build: ./backend
@@ -28,6 +32,8 @@ services:
     ports:
       - "8000:8000"
     command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    networks:
+      - restack-network
 
   worker:
     build: ./backend
@@ -40,6 +46,8 @@ services:
       - docker-dind
       - backend
     command: ["poetry", "run", "python", "src/services.py"]
+    networks:
+      - restack-network
 
   frontend:
     build: ./frontend
@@ -48,3 +56,9 @@ services:
     ports:
       - "3000:8080"
     command: ["npm", "run", "dev"]
+    networks:
+      - restack-network
+  
+networks:
+  restack-network:
+    driver: bridge
