@@ -12,9 +12,11 @@ docker-compose up
 ```
 * Frontend UI: http://localhost:3000/
 * (Optional) Restack UI: http://localhost:5233/
+
+## Usage in Frontend UI
 1. Enter your user_prompt and test_conditions.
 2. Click "Run Workflow".
-* It will recursively generate code, run the code, and fix the code if needed until it deems that your test case(s) are fulfilled.
+* 🤖 It will recursively generate code, run the code, and fix the code if needed until it deems that your test case(s) are fulfilled.
 -------------------------------------------------------------
 ## Overview
 This project sets up an autonomous coding workflow using Restack, OpenAI’s GPT models, Docker-in-Docker for building and running Docker images, and a frontend React UI to interact with the system. Users can provide a user_prompt and test_conditions to generate code automatically, run it in a containerized environment, and validate the results. Users can also toggle an "advanced mode" to edit system prompts directly.
