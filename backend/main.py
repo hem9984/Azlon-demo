@@ -60,7 +60,7 @@ async def run_workflow(params: UserInput):
     temporal_namespace="default")
 
     # Initialize Restack with these options options=connection_options
-    client = Restack()
+    client = Restack(connection_options)
     try:
         workflow_id = f"{int(time.time() * 1000)}-AutonomousCodingWorkflow"
         runId = await client.schedule_workflow(
