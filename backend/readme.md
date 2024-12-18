@@ -1,4 +1,4 @@
-# To start restack enine
+# To start restack engine
 docker run -d --pull always --name restack -p 5233:5233 -p 6233:6233 -p 7233:7233 ghcr.io/restackio/restack:main
 
 # to stop container
@@ -7,7 +7,11 @@ docker kill restack
 # to remove stopped container
 docker rm restack
 
-
+# for reseting docker cache for development purposes
+```
+docker compose down -v
+docker compose up --build
+```
 # TODO
 friendly UI. add hardcode print statement at the bottom of the script everytime to enhance test case validation
 
