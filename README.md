@@ -8,7 +8,7 @@ cd Azlon-demo
 echo "OPENAI_KEY=sk-..." > .env
 ```
 ```
-docker-compose up
+docker compose up
 ```
 * Frontend UI: http://localhost:3000/
 * (Optional) Restack UI: http://localhost:5233/
@@ -58,7 +58,7 @@ echo "OPENAI_KEY=sk-..." > .env
 3. Start them all with one command:
 bash
 ```
-docker-compose up
+docker compose up
 ```
 ### This will:
 
