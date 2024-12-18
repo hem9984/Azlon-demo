@@ -56,7 +56,7 @@ async def run_workflow(params: UserInput):
     # This may enable TLS since api_key is not None, if that fails, consider modifying Restack code to allow no TLS.
     connection_options = CloudConnectionOptions(
         engine_id="local",
-        api_key="local",
+        api_key=None,
         address="restack-engine:7233",
         api_address="restack-engine:6233",
         temporal_namespace="default"
