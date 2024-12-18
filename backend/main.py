@@ -1,12 +1,14 @@
 # ./backend/main.py
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from restack_ai import Restack
 import time
 
 from src.prompts import get_prompts, set_prompts
+
+import uvicorn
 
 app = FastAPI()
 
