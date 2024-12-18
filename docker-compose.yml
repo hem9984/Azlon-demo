@@ -3,16 +3,17 @@ services:
     image: ghcr.io/restackio/restack:main
     container_name: restack
     ports:
-      - "5233:5233"
-      - "6233:6233"
-      - "7233:7233"
+      - "5233:5233"  # GUI
+      - "6233:6233"  # RPC
+      - "7233:7233"  # Temporal
     restart: always
 
   docker-dind:
     image: docker:24-dind
     privileged: true
-    environment:
-      DOCKER_TLS_CERTDIR: ""
+    # Disable TLS and run insecurely (for local dev only)
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+    # No DOCKER_TLS_CERTDIR needed since we explicitly disabled TLS
     ports:
       - "2375:2375"
 
@@ -20,6 +21,8 @@ services:
     build: ./backend
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
+      - RESTACK_ENGINE_ADDRESS=http://restack-engine:6233
+      # If you still need the Docker host for build steps inside backend:
       - DOCKER_HOST=tcp://docker-dind:2375
     depends_on:
       - restack-engine
@@ -35,4 +38,3 @@ services:
     ports:
       - "3000:8080"
     command: ["npm", "run", "dev"]
-
