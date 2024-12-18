@@ -52,7 +52,7 @@ async def run_workflow(params: UserInput):
         engine_id="local",
         api_key=None,
         address="restack-engine:7233",
-        api_address="restack-engine:6233",
+        api_address="restack-engine:6233/api",
         temporal_namespace="default"
     )
 
