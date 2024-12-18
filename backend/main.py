@@ -2,20 +2,17 @@
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import time
-import os
 
 from src.prompts import get_prompts, set_prompts
-
-# We assume local dev mode for Restack
-# If RESTACK_ENGINE_ADDRESS is set, Restack uses it for local dev.
 from restack_ai import Restack
+from restack_ai.restack import CloudConnectionOptions
 
 app = FastAPI()
 
-# CORS configuration: allow from your frontend origin
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -41,10 +38,8 @@ def update_prompts(prompts: PromptsInput):
     set_prompts(prompts.generate_code_prompt, prompts.validate_output_prompt)
     return {"status": "updated"}
 
-# Exception handler to ensure CORS headers on errors
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    # For security, return a generic message
     return JSONResponse(
         status_code=500,
         content={"error": "Internal Server Error."},
@@ -53,23 +48,32 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.post("/run_workflow")
 async def run_workflow(params: UserInput):
-    # In local dev mode, Restack tries RESTACK_ENGINE_ADDRESS if set.
-    # Ensure RESTACK_ENGINE_ADDRESS=http://restack:6233 is set in docker-compose environment.
+    # Use CloudConnectionOptions with dummy engine_id and api_key
+    # We know from the code snippet that engine_id and api_key are required fields
+    # We'll set engine_id="local" and api_key="local" just to satisfy requirements.
+    # address should point to Temporal endpoint (7233)
+    # api_address should point to Restack RPC endpoint (6233)
+    # This may enable TLS since api_key is not None, if that fails, consider modifying Restack code to allow no TLS.
+    connection_options = CloudConnectionOptions(
+        engine_id="local",
+        api_key="local",
+        address="restack-engine:7233",
+        api_address="restack-engine:6233",
+        temporal_namespace="default"
+    )
 
+    # Initialize Restack with these options
+    client = Restack(options=connection_options)
     try:
-        # No arguments means local dev mode using RESTACK_ENGINE_ADDRESS
-        client = Restack()
         workflow_id = f"{int(time.time() * 1000)}-AutonomousCodingWorkflow"
         runId = await client.schedule_workflow(
             workflow_name="AutonomousCodingWorkflow",
             workflow_id=workflow_id,
-            input=params
+            input=params.dict()
         )
-        result = await client.get_workflow_result(
-            workflow_id=workflow_id,
-            run_id=runId
-        )
+        result = await client.get_workflow_result(workflow_id=workflow_id, run_id=runId)
         return {"workflow_id": workflow_id, "result": result}
     except Exception as e:
-        # Return a 500 error on failure, the global_exception_handler adds CORS
+        # If engine connection or workflow run fails, a 500 error is raised
+        # The global_exception_handler ensures CORS headers are included.
         raise HTTPException(status_code=500, detail="Failed to connect to Restack engine or run workflow.")
