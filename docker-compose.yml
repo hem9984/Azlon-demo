@@ -25,7 +25,7 @@ services:
       # If you still need the Docker host for build steps inside backend:
       - DOCKER_HOST=tcp://docker-dind:2375
     depends_on:
-      - restack-engine
+      - restack_engine
       - docker-dind
     ports:
       - "8000:8000"
