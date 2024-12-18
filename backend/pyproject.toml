@@ -14,7 +14,7 @@ python = ">=3.10,<4.0"
 restack-ai = "0.0.47"
 openai = "1.57.1"
 pydantic = "^2.10.3"
-fastapi = "^0.95.2"
+fastapi = "^0.103.2"  
 uvicorn = "^0.22.0"
 
 [tool.poetry.dev-dependencies]
