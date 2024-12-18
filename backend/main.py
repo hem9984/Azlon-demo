@@ -3,9 +3,13 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from restack_ai import Restack
-import time
 from fastapi.responses import JSONResponse
+import time
+import os
+
+# Import Restack and connection options
+from restack_ai import Restack
+from restack_ai.restack import CloudConnectionOptions
 
 from src.prompts import get_prompts, set_prompts
 
@@ -14,7 +18,7 @@ app = FastAPI()
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or "*" if you prefer
+    allow_origins=["*"],  # Match your frontend exactly
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
@@ -37,46 +41,29 @@ def update_prompts(prompts: PromptsInput):
     set_prompts(prompts.generate_code_prompt, prompts.validate_output_prompt)
     return {"status": "updated"}
 
-# Exception handler to ensure CORS headers are present even on errors
+# Exception handler to ensure CORS headers on errors
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    # Log the error if needed
-    # For security, you might want to return a generic message instead of str(exc)
+    # For security and cleanliness, don't expose internal details in production
     return JSONResponse(
         status_code=500,
-        content={"error": str(exc)},
+        content={"error": "Internal Server Error. Check logs for details."},
         headers={"Access-Control-Allow-Origin": "http://localhost:3000"},
     )
 
 @app.post("/run_workflow")
 async def run_workflow(params: UserInput):
-    # Attempt to connect to the Restack engine on the known ports.
-    # According to your run command, ports are mapped:
-    # 5233 - Restack GUI
-    # 6233 - Possibly workflow RPC
-    # 7233 - Possibly Temporal or another internal service
-    # We'll try 6233 first.
-
-    # Inside Docker, use the service name "restack-engine" if defined in docker-compose
-    # If your service is named 'restack-engine', do: host="restack-engine"
-    # If it's named just 'restack', do: host="restack"
-    # We'll assume service name is 'restack-engine' as per your docker-compose
-
-    host = "restack-engine"  # If your docker-compose service is named "restack-engine", use that name. For now let's use "restack" since you named the container restack.
-    # If container_name doesn't define the network alias, set in docker-compose:
-    # services:
-    #   restack-engine:
-    #     container_name: restack
-    #     ...
-    # Then host="restack" works
-
-    # If engine not accessible via 'restack', try 'restack-engine'.
-    # host = "restack-engine"
-
-    port = 6233  # Attempt with 6233 first
+    # According to your docker run, ports are mapped, and inside docker network:
+    # restack-engine:6233 should be accessible.
+    # We will attempt to connect directly with connection options.
+    
+    connection_options = CloudConnectionOptions(
+        address="restack-engine:6233"
+        # no engine_id or api_key since running locally
+    )
+    client = Restack(connection_options=connection_options)
 
     try:
-        client = Restack(host=host, port=port)
         workflow_id = f"{int(time.time() * 1000)}-AutonomousCodingWorkflow"
         runId = await client.schedule_workflow(
             workflow_name="AutonomousCodingWorkflow",
@@ -89,21 +76,6 @@ async def run_workflow(params: UserInput):
         )
         return {"workflow_id": workflow_id, "result": result}
     except Exception as e:
-        # If connection fails, you can try another port or raise an HTTPException.
-        # Try 7233 if 6233 fails:
-        try:
-            client = Restack(host=host, port=7233)
-            workflow_id = f"{int(time.time() * 1000)}-AutonomousCodingWorkflow"
-            runId = await client.schedule_workflow(
-                workflow_name="AutonomousCodingWorkflow",
-                workflow_id=workflow_id,
-                input=params
-            )
-            result = await client.get_workflow_result(
-                workflow_id=workflow_id,
-                run_id=runId
-            )
-            return {"workflow_id": workflow_id, "result": result}
-        except Exception as e2:
-            # If still fails, raise a 500 error
-            raise HTTPException(status_code=500, detail="Failed to connect to Restack engine on both ports.")
+        # If it fails here, it likely couldn't connect or failed inside Restack.
+        # The global_exception_handler will ensure CORS headers.
+        raise HTTPException(status_code=500, detail="Failed to connect to Restack engine or run workflow.")
