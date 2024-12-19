@@ -11,15 +11,15 @@ from src.prompts import get_prompts, set_prompts
 from restack_ai import Restack
 from restack_ai.restack import CloudConnectionOptions
 
-RESTACK_ENGINE_ADDRESS = os.getenv('RESTACK_ENGINE_ADDRESS', 'restack-engine:6233')
-RESTACK_TEMPORAL_ADDRESS = os.getenv('RESTACK_TEMPORAL_ADDRESS', 'restack-engine:7233')
+RESTACK_ENGINE_ADDRESS = os.getenv('RESTACK_ENGINE_ADDRESS')
+RESTACK_TEMPORAL_ADDRESS = os.getenv('RESTACK_TEMPORAL_ADDRESS')
 
 app = FastAPI()
 
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000","http://localhost:8080"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
