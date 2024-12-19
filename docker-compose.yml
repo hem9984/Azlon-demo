@@ -2,7 +2,7 @@ services:
   restack-engine:
     image: ghcr.io/restackio/restack:main
     container_name: restack
-    environment:
+    #environment:
     # ports are ignored with network_mode: host, but you can list them for reference:
     # - "5233:5233"
     # - "6233:6233"
