@@ -3,64 +3,56 @@ services:
     image: ghcr.io/restackio/restack:main
     container_name: restack
     environment:
-      - RESTACK_ENGINE_ADDRESS=0.0.0.0:6233  # Ensure engine binds to 0.0.0.0
-    ports:
-      - "5233:5233" # GUI
-      - "6233:6233" # RPC
-      - "7233:7233" # Temporal
+      - RESTACK_ENGINE_ADDRESS=0.0.0.0:6233
+    # ports are ignored with network_mode: host, but you can list them for reference:
+    # - "5233:5233"
+    # - "6233:6233"
+    # - "7233:7233"
     restart: always
-    networks:
-      - restack-network
+    network_mode: host
 
   docker-dind:
     image: docker:24-dind
     privileged: true
     command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
-    ports:
-      - "2375:2375"
-    networks:
-      - restack-network
+    # ports are ignored in host mode, but for reference:
+    # - "2375:2375"
+    network_mode: host
 
   backend:
     build: ./backend
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
-      - DOCKER_HOST=tcp://docker-dind:2375
-      - RESTACK_ENGINE_ADDRESS=restack-engine:6233
+      # Since we are on host network now, docker-dind is also on host network:
+      - DOCKER_HOST=tcp://localhost:2375
+      - RESTACK_ENGINE_ADDRESS=localhost:6233
     depends_on:
       - restack-engine
       - docker-dind
-    ports:
-      - "8000:8000"
+    # ports ignored but for reference:
+    # - "8000:8000"
     command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-    networks:
-      - restack-network
+    network_mode: host
 
   worker:
     build: ./backend
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
-      - DOCKER_HOST=tcp://docker-dind:2375
-      - RESTACK_ENGINE_ADDRESS=restack-engine:6233
-      - RESTACK_TEMPORAL_ADDRESS=restack-engine:7233
+      - DOCKER_HOST=tcp://localhost:2375
+      - RESTACK_ENGINE_ADDRESS=localhost:6233
+      - RESTACK_TEMPORAL_ADDRESS=localhost:7233
     depends_on:
       - restack-engine
       - docker-dind
       - backend
     command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
-    networks:
-      - restack-network
+    network_mode: host
 
   frontend:
     build: ./frontend
     depends_on:
       - backend
-    ports:
-      - "3000:8080"
+    # ports ignored but for reference:
+    # - "3000:8080"
     command: ["npm", "run", "dev"]
-    networks:
-      - restack-network
-  
-networks:
-  restack-network:
-    driver: bridge
+    network_mode: host
