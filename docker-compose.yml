@@ -3,7 +3,6 @@ services:
     image: ghcr.io/restackio/restack:main
     container_name: restack
     environment:
-      - RESTACK_ENGINE_ADDRESS=0.0.0.0:6233
     # ports are ignored with network_mode: host, but you can list them for reference:
     # - "5233:5233"
     # - "6233:6233"
