@@ -2,6 +2,8 @@ services:
   restack-engine:
     image: ghcr.io/restackio/restack:main
     container_name: restack
+    environment:
+      - RESTACK_ENGINE_ADDRESS=0.0.0.0:6233  # Ensure engine binds to 0.0.0.0
     ports:
       - "5233:5233" # GUI
       - "6233:6233" # RPC
@@ -13,7 +15,6 @@ services:
   docker-dind:
     image: docker:24-dind
     privileged: true
-    # Disable TLS for local dev to remove the warning
     command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
     ports:
       - "2375:2375"
@@ -46,7 +47,7 @@ services:
       - restack-engine
       - docker-dind
       - backend
-    command: ["sh", "-c", "sleep 10 && poetry run python -m src.services"]
+    command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
     networks:
       - restack-network
 
