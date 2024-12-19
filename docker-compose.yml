@@ -1,57 +1,69 @@
+#PROBLEM IS THAT RESTACK ENGINE RUNS ON localhost instead of 0.0.0.0 
+# which means that the other docker containers in the network cannot access it.
+# I have a working docker-compose.yml on "working-linux-only" branch, but it only works on linux operating systems
 services:
   restack-engine:
     image: ghcr.io/restackio/restack:main
     container_name: restack
-    #environment:
-    # ports are ignored with network_mode: host, but you can list them for reference:
-    # - "5233:5233"
-    # - "6233:6233"
-    # - "7233:7233"
+    environment:
+      - RESTACK_ENGINE_ADDRESS=0.0.0.0:6233  # Ensure engine binds to 0.0.0.0
+    ports:
+      - "5233:5233" # GUI
+      - "6233:6233" # RPC
+      - "7233:7233" # Temporal
     restart: always
-    network_mode: host
+    networks:
+      - restack-network
 
   docker-dind:
     image: docker:24-dind
     privileged: true
     command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
-    # ports are ignored in host mode, but for reference:
-    # - "2375:2375"
-    network_mode: host
+    ports:
+      - "2375:2375"
+    networks:
+      - restack-network
 
   backend:
     build: ./backend
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
-      # Since we are on host network now, docker-dind is also on host network:
-      - DOCKER_HOST=tcp://localhost:2375
-      - RESTACK_ENGINE_ADDRESS=localhost:6233
+      - DOCKER_HOST=tcp://docker-dind:2375
+      - RESTACK_ENGINE_ADDRESS=restack-engine:6233
     depends_on:
       - restack-engine
       - docker-dind
-    # ports ignored but for reference:
-    # - "8000:8000"
+    ports:
+      - "8000:8000"
     command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-    network_mode: host
+    networks:
+      - restack-network
 
   worker:
     build: ./backend
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
-      - DOCKER_HOST=tcp://localhost:2375
-      - RESTACK_ENGINE_ADDRESS=localhost:6233
-      - RESTACK_TEMPORAL_ADDRESS=localhost:7233
+      - DOCKER_HOST=tcp://docker-dind:2375
+      - RESTACK_ENGINE_ADDRESS=restack-engine:6233
+      - RESTACK_TEMPORAL_ADDRESS=restack-engine:7233
     depends_on:
       - restack-engine
       - docker-dind
       - backend
     command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
-    network_mode: host
+    networks:
+      - restack-network
 
   frontend:
     build: ./frontend
     depends_on:
       - backend
-    # ports ignored but for reference:
-    # - "3000:8080"
+    ports:
+      - "3000:8080"
     command: ["npm", "run", "dev"]
-    network_mode: host
+    networks:
+      - restack-network
+  
+networks:
+  restack-network:
+    driver: bridge
