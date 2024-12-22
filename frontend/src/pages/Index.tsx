@@ -91,7 +91,7 @@ const Index = () => {
     <div className="min-h-screen gradient-bg py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-4xl font-bold text-center mb-8 bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600">
-          Azlon-Demo
+          Auto-Mode Demo
         </h1>
         
         <WorkflowForm
