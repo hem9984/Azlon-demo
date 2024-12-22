@@ -1,5 +1,9 @@
 # Auto Mode Autonomous Smart Contract Creation Coding Workflow
 # LINUX ONLY INSTRUCTIONS, WILL NOT WORK ON MAC OR WINDOWS
+## LINUX HIGHLY RECCOMENDED If you need to use on Mac, it can still work but. you have to look in the docker-compose.yml and start all the containers manually. 
+## Prereqs:
+* Docker 
+* Docker compose
 ```
 git clone https://github.com/Pomu-io/Auto-Mode.git
 cd Auto-Mode
