@@ -11,12 +11,9 @@ git switch Auto-Mode
 ```
 ```
 echo "OPENAI_KEY=sk-...
-WALLET_PRIVATE_KEY=0x1234...
-WALLET_ADDRESS=0xABCD...
-MODE_NETWORK=modeTestnet
-CROSSMINT_API_KEY=aCrossmintKey
 " > .env
 ```
+### Please tell it to hardcode your wallet address and crossmint api keys in the code that it generates. This way it can properly connect to Mode network.
 ```
 docker compose up
 ```
