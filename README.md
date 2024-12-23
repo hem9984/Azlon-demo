@@ -5,8 +5,9 @@
 * Docker 
 * Docker compose
 ```
-git clone https://github.com/Pomu-io/Auto-Mode.git
-cd Auto-Mode
+git clone https://github.com/hem9984/Azlon-demo.git
+cd Azlon-demo
+git switch Auto-Mode
 ```
 ```
 echo "OPENAI_KEY=sk-...
