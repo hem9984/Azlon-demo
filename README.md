@@ -3,6 +3,7 @@
 ```
 git clone https://github.com/hem9984/Azlon-demo.git
 cd Azlon-demo
+git switch linux-working-only
 ```
 ```
 echo "OPENAI_KEY=sk-..." > .env
