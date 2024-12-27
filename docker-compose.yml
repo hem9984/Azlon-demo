@@ -13,7 +13,7 @@ services:
   docker-dind:
     image: docker:24-dind
     privileged: true
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+    command: ["dockerd", "--host=tcp://localhost:2375", "--tls=false"]
     # ports are ignored in host mode, but for reference:
     # - "2375:2375"
     network_mode: host
