@@ -23,7 +23,7 @@ services:
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
       # Since we are on host network now, docker-dind is also on host network:
-      - DOCKER_HOST=tcp://localhost:2375
+      - DOCKER_HOST=tcp://0.0.0.0:2375
       - RESTACK_ENGINE_ADDRESS=localhost:6233
     depends_on:
       - restack-engine
@@ -37,7 +37,7 @@ services:
     build: ./backend
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
-      - DOCKER_HOST=tcp://localhost:2375
+      - DOCKER_HOST=tcp://0.0.0.0:2375
       - RESTACK_ENGINE_ADDRESS=localhost:6233
       - RESTACK_TEMPORAL_ADDRESS=localhost:7233
     depends_on:
