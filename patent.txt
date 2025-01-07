@@ -1,0 +1,696 @@
+# Copyright (C) 2024 Harrison E. Muchnic
+# This program is licensed under the Affero General Public License (AGPL).
+# See the LICENSE file for details.
+
+# ./backend/src/functions/functions.py
+from restack_ai.function import function, log
+from dataclasses import dataclass
+import os
+import openai
+import json
+import tempfile
+import subprocess
+
+from pydantic import BaseModel
+from typing import List, Optional
+
+from src.prompts import current_generate_code_prompt, current_validate_output_prompt
+
+openai.api_key = os.environ.get("OPENAI_KEY")
+
+# Use the OpenAI Python SDK's structured output parsing
+from openai import OpenAI
+client = OpenAI(api_key=openai.api_key)
+
+class FileItem(BaseModel):
+    filename: str
+    content: str
+
+    class Config:
+        extra = "forbid"
+        schema_extra = {
+            "type": "object",
+            "properties": {
+                "filename": {"type": "string"},
+                "content": {"type": "string"}
+            },
+            "required": ["filename", "content"],
+            "additionalProperties": False
+        }
+
+class GenerateCodeSchema(BaseModel):
+    dockerfile: str
+    files: List[FileItem]
+    
+    class Config:
+        extra = "forbid"
+        schema_extra = {
+            "type": "object",
+            "properties": {
+                "dockerfile": {"type": "string"},
+                "files": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/FileItem"}
+                }
+            },
+            "required": ["dockerfile", "files"],
+            "additionalProperties": False,
+            "$defs": {
+                "FileItem": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {"type": "string"},
+                        "content": {"type": "string"}
+                    },
+                    "required": ["filename", "content"],
+                    "additionalProperties": False
+                }
+            }
+        }
+
+class ValidateOutputSchema(BaseModel):
+    result: bool
+    dockerfile: Optional[str] = None
+    files: Optional[List[FileItem]] = None
+    
+    class Config:
+        extra = "forbid"
+        schema_extra = {
+            "type": "object",
+            "properties": {
+                "result": {"type": "boolean"},
+                "dockerfile": {
+                    "anyOf": [
+                        {"type": "string"},
+                        {"type": "null"}
+                    ]
+                },
+                "files": {
+                    "anyOf": [
+                        {
+                            "type": "array",
+                            "items": {"$ref": "#/$defs/FileItem"}
+                        },
+                        {"type": "null"}
+                    ]
+                }
+            },
+            "required": ["result", "dockerfile", "files"],
+            "additionalProperties": False,
+            "$defs": {
+                "FileItem": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {"type": "string"},
+                        "content": {"type": "string"}
+                    },
+                    "required": ["filename", "content"],
+                    "additionalProperties": False
+                }
+            }
+        }
+
+
+@dataclass
+class GenerateCodeInput:
+    user_prompt: str
+    test_conditions: str
+
+@dataclass
+class GenerateCodeOutput:
+    dockerfile: str
+    files: list
+
+@function.defn()
+async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
+    log.info("generate_code started", input=input)
+
+    prompt = current_generate_code_prompt.format(
+        user_prompt=input.user_prompt,
+        test_conditions=input.test_conditions
+    )
+
+    completion = client.beta.chat.completions.parse(
+        model="gpt-4o-2024-08-06",
+        messages=[
+            {"role": "system", "content": "You are the initial of an autonomous coding assistant agent. Generate complete code that will run."},
+            {"role": "user", "content": prompt}
+        ],
+        response_format=GenerateCodeSchema
+    )
+
+    result = completion.choices[0].message
+    if result.refusal:
+        raise RuntimeError("Model refused to generate code.")
+    data = result.parsed
+
+    files_list = [{"filename": f.filename, "content": f.content} for f in data.files]
+
+    return GenerateCodeOutput(dockerfile=data.dockerfile, files=files_list)
+
+
+@dataclass
+class RunCodeInput:
+    dockerfile: str
+    files: list
+
+@dataclass
+class RunCodeOutput:
+    output: str
+
+@function.defn()
+async def run_locally(input: RunCodeInput) -> RunCodeOutput:
+    log.info("run_locally started", input=input)
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        dockerfile_path = os.path.join(temp_dir, "Dockerfile")
+        
+        # Write the Dockerfile
+        with open(dockerfile_path, "w", encoding="utf-8") as f:
+            f.write(input.dockerfile)
+        
+        # Write each file
+        for file_item in input.files:
+            file_path = os.path.join(temp_dir, file_item["filename"])
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "w", encoding="utf-8") as ff:
+                ff.write(file_item["content"])
+        
+        # Build the Docker image
+        build_cmd = ["docker", "build", "-t", "myapp", temp_dir]
+        build_process = subprocess.run(build_cmd, capture_output=True, text=True)
+        if build_process.returncode != 0:
+            return RunCodeOutput(output=build_process.stderr or build_process.stdout)
+        
+        # Run the Docker container
+        run_cmd = ["docker", "run", "--rm", "myapp"]
+        run_process = subprocess.run(run_cmd, capture_output=True, text=True)
+        if run_process.returncode != 0:
+            return RunCodeOutput(output=run_process.stderr or run_process.stdout)
+        
+        return RunCodeOutput(output=run_process.stdout)
+
+
+@dataclass
+class ValidateOutputInput:
+    dockerfile: str
+    files: list
+    output: str
+    test_conditions: str
+
+@dataclass
+class ValidateOutputOutput:
+    result: bool
+    dockerfile: Optional[str] = None
+    files: Optional[list] = None
+
+@function.defn()
+async def validate_output(input: ValidateOutputInput) -> ValidateOutputOutput:
+    log.info("validate_output started", input=input)
+
+    files_str = json.dumps(input.files, indent=2)
+
+    validation_prompt = current_validate_output_prompt.format(
+        test_conditions=input.test_conditions,
+        dockerfile=input.dockerfile,
+        files_str=files_str,
+        output=input.output
+    )
+
+    completion = client.beta.chat.completions.parse(
+        model="gpt-4o-2024-08-06",
+        messages=[
+            {"role": "system", "content": "You are an iteration of an autonomous coding assistant agent. If you change any files, provide complete file content replacements. Append a brief explanation at the bottom of readme.md about what you tried."},
+            {"role": "user", "content": validation_prompt}
+        ],
+        response_format=ValidateOutputSchema
+    )
+
+    result = completion.choices[0].message
+    if result.refusal:
+        return ValidateOutputOutput(result=False)
+
+    data = result.parsed
+    updated_files = [{"filename": f.filename, "content": f.content} for f in data.files] if data.files is not None else None
+
+    return ValidateOutputOutput(result=data.result, dockerfile=data.dockerfile, files=updated_files)
+
+# ./backend/src/workflows/workflow.py
+from restack_ai.workflow import workflow, import_functions, log
+from dataclasses import dataclass
+from datetime import timedelta
+from datetime import datetime
+
+with import_functions():
+    from src.functions.functions import generate_code, run_locally, validate_output
+    from src.functions.functions import GenerateCodeInput, RunCodeInput, ValidateOutputInput
+
+@dataclass
+class WorkflowInputParams:
+    user_prompt: str
+    test_conditions: str
+
+@workflow.defn()
+class AutonomousCodingWorkflow:
+    @workflow.run
+    async def run(self, input: WorkflowInputParams):
+        log.info("AutonomousCodingWorkflow started", input=input)
+
+        gen_output = await workflow.step(
+            generate_code,
+            GenerateCodeInput(
+                user_prompt=input.user_prompt,
+                test_conditions=input.test_conditions
+            ),
+            start_to_close_timeout=timedelta(seconds=300)
+        )
+
+        dockerfile = gen_output.dockerfile
+        files = gen_output.files  # list of {"filename":..., "content":...}
+
+        iteration_count = 0
+        max_iterations = 20
+
+        while iteration_count < max_iterations:
+            iteration_count += 1
+            log.info(f"Iteration {iteration_count} start")
+
+            run_output = await workflow.step(
+                run_locally,
+                RunCodeInput(dockerfile=dockerfile, files=files),
+                start_to_close_timeout=timedelta(seconds=300)
+            )
+
+            val_output = await workflow.step(
+                validate_output,
+                ValidateOutputInput(
+                    dockerfile=dockerfile,
+                    files=files,
+                    output=run_output.output,
+                    test_conditions=input.test_conditions
+                ),
+                start_to_close_timeout=timedelta(seconds=300)
+            )
+
+            if val_output.result:
+                log.info("AutonomousCodingWorkflow completed successfully")
+                return True
+            else:
+                changed_files = val_output.files if val_output.files else []
+                if val_output.dockerfile:
+                    dockerfile = val_output.dockerfile
+
+                # Update the files list in-memory
+                for changed_file in changed_files:
+                    changed_filename = changed_file["filename"]
+                    changed_content = changed_file["content"]
+                    found = False
+                    for i, existing_file in enumerate(files):
+                        if existing_file["filename"] == changed_filename:
+                            files[i]["content"] = changed_content
+                            found = True
+                            break
+                    if not found:
+                        files.append({"filename": changed_filename, "content": changed_content})
+
+        log.warn("AutonomousCodingWorkflow reached max iterations without success")
+        return False
+
+# ./backend/src/prompts.py
+
+# Store defaults here
+default_generate_code_prompt = """You are an autonomous coding agent.
+
+The user prompt: {user_prompt}
+The test conditions: {test_conditions}
+
+You must produce a Docker environment and code that meets the user's test conditions.
+
+**Additional Requirements**:
+- Start by creating a `readme.md` file as your first file in the files array. This `readme.md` should begin with `#./readme.md` and contain:
+  - A brief summary of the user's prompt.
+  - A brief step-by-step plan of what you intend to do to meet the test conditions.
+- Use a stable base Docker image: `FROM python:3.10-slim`.
+- Install any necessary dependencies in the Dockerfile.
+- Generate any configuration files (like `pyproject.toml` or `requirements.txt`) before the main Python files, if needed.
+- Each file must start with `#./<filename>` on the first line. For example:
+  `#./main.py`
+  `print('hello world')`
+- The Dockerfile should define an ENTRYPOINT that runs the main script or commands automatically so that running the container (e.g. `docker run ...`) immediately produces the final output required by the test conditions.
+- Ensure the output visible on stdout fulfills the test conditions without further intervention.
+
+**Return JSON strictly matching this schema**:
+{{
+  "dockerfile": "<string>",
+  "files": [
+    {{
+      "filename": "<string>",
+      "content": "<string>"
+    }},
+    ...
+  ]
+}}
+
+**Order of files**:
+1. `readme.md` (with reasoning and plan)
+2. Any configuration files (like `pyproject.toml` or `requirements.txt`)
+3. Your main Python application files
+
+**Example**:
+{{
+  "dockerfile": "FROM python:3.10-slim\\n... ENTRYPOINT [\\"python3\\", \\"main.py\\"]",
+  "files": [
+    {{
+      "filename": "readme.md",
+      "content": "#./readme.md\\nThis is my reasoning..."
+    }},
+    {{
+      "filename": "pyproject.toml",
+      "content": "#./pyproject.toml\\n..."
+    }},
+    {{
+      "filename": "main.py",
+      "content": "#./main.py\\nprint('hello world')"
+    }}
+  ]
+}}
+"""
+
+default_validate_output_prompt = """The test conditions: {test_conditions}
+
+dockerfile:
+{dockerfile}
+
+files:
+{files_str}
+
+output:
+{output}
+
+If all test conditions are met, return exactly:
+{{ "result": true, "dockerfile": null, "files": null }}
+
+Otherwise (if you need to fix or add files, modify the dockerfile, etc.), return exactly:
+{{
+  "result": false,
+  "dockerfile": "FROM python:3.10-slim\\n...",
+  "files": [
+    {{
+      "filename": "filename.ext",
+      "content": "#./filename.ext\\n..."
+    }}
+  ]
+}}
+
+You may add, remove, or modify multiple files as needed when returning false. Just ensure you follow the same schema and format strictly. Do not add extra commentary or keys.
+If returning null for dockerfile or files, use JSON null, not a string."""
+
+# Storing the current prompts in memory for simplicity.
+current_generate_code_prompt = default_generate_code_prompt
+current_validate_output_prompt = default_validate_output_prompt
+
+def get_prompts():
+    return {
+        "generate_code_prompt": current_generate_code_prompt,
+        "validate_output_prompt": current_validate_output_prompt
+    }
+
+def set_prompts(generate_code_prompt: str, validate_output_prompt: str):
+    global current_generate_code_prompt, current_validate_output_prompt
+    current_generate_code_prompt = generate_code_prompt
+    current_validate_output_prompt = validate_output_prompt
+
+# ./backend/src/services.py
+import asyncio
+from src.client import client
+from src.functions.functions import generate_code, run_locally, validate_output
+from src.workflows.workflow import AutonomousCodingWorkflow
+
+async def main():
+    await client.start_service(
+        workflows=[AutonomousCodingWorkflow],
+        functions=[generate_code, run_locally, validate_output],
+    )
+
+def run_services():
+    asyncio.run(main())
+
+if __name__ == "__main__":
+    run_services()
+
+# ./backend/src/client.py
+from restack_ai import Restack
+client = Restack()
+
+# ./backend/main.py
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+import time
+import os
+
+from src.prompts import get_prompts, set_prompts
+from restack_ai import Restack
+from restack_ai.restack import CloudConnectionOptions
+
+RESTACK_ENGINE_ADDRESS = os.getenv('RESTACK_ENGINE_ADDRESS')
+RESTACK_TEMPORAL_ADDRESS = os.getenv('RESTACK_TEMPORAL_ADDRESS')
+
+app = FastAPI()
+
+# CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000","http://localhost:8080"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+class UserInput(BaseModel):
+    user_prompt: str
+    test_conditions: str
+
+class PromptsInput(BaseModel):
+    generate_code_prompt: str
+    validate_output_prompt: str
+
+@app.get("/prompts")
+def fetch_prompts():
+    return get_prompts()
+
+@app.post("/prompts")
+def update_prompts(prompts: PromptsInput):
+    set_prompts(prompts.generate_code_prompt, prompts.validate_output_prompt)
+    return {"status": "updated"}
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal Server Error."},
+        headers={"Access-Control-Allow-Origin": "http://localhost:3000"},
+    )
+
+@app.post("/run_workflow")
+async def run_workflow(params: UserInput):
+    connection_options = CloudConnectionOptions(
+    engine_id="local",
+    api_key=None,
+    address=RESTACK_TEMPORAL_ADDRESS,
+    api_address=RESTACK_ENGINE_ADDRESS,
+    temporal_namespace="default")
+
+    # Initialize Restack with these options options=connection_options
+    client = Restack(connection_options)
+    try:
+        workflow_id = f"{int(time.time() * 1000)}-AutonomousCodingWorkflow"
+        runId = await client.schedule_workflow(
+            workflow_name="AutonomousCodingWorkflow",
+            workflow_id=workflow_id,
+            input=params.dict()
+        )
+        result = await client.get_workflow_result(workflow_id=workflow_id, run_id=runId)
+        return {"workflow_id": workflow_id, "result": result}
+    except Exception as e:
+        # If engine connection or workflow run fails, a 500 error is raised
+        # The global_exception_handler ensures CORS headers are included.
+        raise HTTPException(status_code=500, detail="Failed to connect to Restack engine or run workflow.")
+
+# ./backend/Dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+COPY pyproject.toml poetry.lock* /app/
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    gnupg \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y docker-ce-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install poetry && poetry install --no-root
+
+COPY . /app
+
+# ./backend/pyproject.toml
+# Project metadata
+[tool.poetry]
+name = "azlon"
+version = "0.0.1"
+description = "autonomous coding project solver"
+authors = [
+    "Harrison E. Muchnic <hem9984@nyu.edu>",
+]
+readme = "readme.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+restack-ai = "0.0.50"
+openai = "1.57.1"
+pydantic = "^2.10.3"
+fastapi = "0.115.4"  
+uvicorn = "^0.22.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "6.2"  # Optional: Add if you want to include tests in your example
+
+# Build system configuration
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# CLI command configuration
+[tool.poetry.scripts]
+services = "src.services:run_services"
+schedule = "schedule_workflow:run_schedule_workflow"
+
+# ./docker-compose.yml
+services:
+  restack-engine:
+    image: ghcr.io/restackio/restack:main
+    container_name: restack
+    #environment:
+    # ports are ignored with network_mode: host, but you can list them for reference:
+    # - "5233:5233"
+    # - "6233:6233"
+    # - "7233:7233"
+    restart: always
+    network_mode: host
+
+  docker-dind:
+    image: docker:24-dind
+    privileged: true
+    command: ["dockerd", "--host=tcp://localhost:2375", "--tls=false"]
+    # ports are ignored in host mode, but for reference:
+    # - "2375:2375"
+    network_mode: host
+
+  backend:
+    build: ./backend
+    environment:
+      - OPENAI_KEY=${OPENAI_KEY}
+      # Since we are on host network now, docker-dind is also on host network:
+      - DOCKER_HOST=tcp://localhost:2375
+      - RESTACK_ENGINE_ADDRESS=localhost:6233
+    depends_on:
+      - restack-engine
+      - docker-dind
+    # ports ignored but for reference:
+    # - "8000:8000"
+    command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    network_mode: host
+
+  worker:
+    build: ./backend
+    environment:
+      - OPENAI_KEY=${OPENAI_KEY}
+      - DOCKER_HOST=tcp://localhost:2375
+      - RESTACK_ENGINE_ADDRESS=localhost:6233
+      - RESTACK_TEMPORAL_ADDRESS=localhost:7233
+    depends_on:
+      - restack-engine
+      - docker-dind
+      - backend
+    command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
+    network_mode: host
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    # ports ignored but for reference:
+    # - "3000:8080"
+    command: ["npm", "run", "dev"]
+    network_mode: host
+
+# ./.env
+OPENAI_KEY='sk-proj-cXLzCrcih...'
+---------------------------------------
+./backend/.
+├── Dockerfile
+├── example.env
+├── __init__.py
+├── LICENSE
+├── main.py
+├── pyproject.toml
+├── readme.md
+├── schedule_workflow.py
+└── src
+    ├── client.py
+    ├── functions
+    │   ├── functions.py
+    │   └── __init__.py
+    ├── __init__.py
+    ├── prompts.py
+    ├── services.py
+    └── workflows
+        ├── __init__.py
+        └── workflow.py
+
+# ./backend/schedule_workflow.py
+# DEPRECATED SIMPLE EXAMPLE OF RUNNING WORKFLOW (poetry run services poetry run schedule)
+
+import asyncio
+import time
+from restack_ai import Restack
+from dataclasses import dataclass
+
+@dataclass
+class InputParams:
+    user_prompt: str
+    test_conditions: str
+
+async def main():
+    client = Restack()
+
+    workflow_id = f"{int(time.time() * 1000)}-AutonomousCodingWorkflow"
+    runId = await client.schedule_workflow(
+        workflow_name="AutonomousCodingWorkflow",
+        workflow_id=workflow_id,
+        input=InputParams(
+            user_prompt="Write a python script that prints 'hello world'",
+            test_conditions="The script must print exactly 'hello world' and exit with code 0."
+        )
+    )
+
+    result = await client.get_workflow_result(
+        workflow_id=workflow_id,
+        run_id=runId
+    )
+    print("4861727269736f6e456d6d616e75656c4d7563686e6963", result)
+
+def run_schedule_workflow():
+    asyncio.run(main())
+
+if __name__ == "__main__":
+    run_schedule_workflow()
+
+HOW IT WORKS:
+'docker compose up' starts up frontend and backend containers as well as auxiliary containers. The user enters 'user_prompt' and 'test_conditions' into the text boxes in the frontend UI. When they click run workflow, the inputs are sent to the backend container via fastapi in main.py. The workflow is scheduled and autonomously continues until the test conditions are deemed complete. The user then can use the generated project files for their intended purpose. The code can be tweaked for many specific applications, but the core concepts remain the same.
