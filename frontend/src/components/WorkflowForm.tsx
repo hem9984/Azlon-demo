@@ -56,8 +56,7 @@ const WorkflowForm = ({
               value={userPrompt}
               onChange={(e) => setUserPrompt(e.target.value)}
               className="h-32 mt-2 textarea-code"
-              placeholder="Build an ERC-721 NFT contract that uses Crossmint to automatically mint an NFT when the user pays. Deploy to Mode Testnet using WALLET_PRIVATE_KEY."
-
+              placeholder="Write a Python script that prints 'hello world'"
             />
           </div>
 
@@ -68,21 +67,7 @@ const WorkflowForm = ({
               value={testConditions}
               onChange={(e) => setTestConditions(e.target.value)}
               className="h-32 mt-2 textarea-code"
-              placeholder="The contract is a valid ERC-721 NFT contract.
-The contract integrates Crossmint’s API so that whenever a user calls a “mint” function and pays the required amount, Crossmint is invoked to automate the minting process.
-The contract is deployed successfully to Mode Testnet at chain ID 919. 
-   
-A Hardhat test script confirms:
-   - The contract compiles successfully (no compilation errors).
-   - At least one test transaction is performed on Mode Testnet to confirm deployment. 
-   - If the user wants a more thorough test, check that `balanceOf(minter)` increments by 1 after the mint function.
-If Crossmint has any relevant environment variables like `CROSSMINT_API_KEY`, ensure they are read from `process.env`.
-The Docker container must exit with code 0 only if:
-   - The contract compiles.
-   - The Hardhat tests pass.
-   - The contract is deployed on Mode Testnet without errors.
-Print the final deployed contract address (on Mode Testnet) to stdout or logs.
-"
+              placeholder="The script must print exactly 'hello world' and exit with code 0."
             />
           </div>
 
