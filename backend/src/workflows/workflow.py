@@ -2,15 +2,22 @@
 # This program is licensed under the Affero General Public License (AGPL).
 # See the LICENSE file for details.
 
-# src/workflows/workflow.py
+# ./backend/src/workflows/workflow.py
+
 from restack_ai.workflow import workflow, import_functions, log
 from dataclasses import dataclass
 from datetime import timedelta
-from datetime import datetime
 
 with import_functions():
-    from src.functions.functions import generate_code, run_locally, validate_output
-    from src.functions.functions import GenerateCodeInput, RunCodeInput, ValidateOutputInput
+    from src.functions.functions import (
+        generate_code,
+        run_locally,
+        validate_output,
+        create_diff,
+        GenerateCodeInput,
+        RunCodeInput,
+        ValidateOutputInput
+    )
 
 @dataclass
 class WorkflowInputParams:
@@ -23,6 +30,7 @@ class AutonomousCodingWorkflow:
     async def run(self, input: WorkflowInputParams):
         log.info("AutonomousCodingWorkflow started", input=input)
 
+        # Step 1: Generate initial code
         gen_output = await workflow.step(
             generate_code,
             GenerateCodeInput(
@@ -31,22 +39,31 @@ class AutonomousCodingWorkflow:
             ),
             start_to_close_timeout=timedelta(seconds=300)
         )
-
         dockerfile = gen_output.dockerfile
-        files = gen_output.files  # list of {"filename":..., "content":...}
+        files = gen_output.files
+
+        prev_files = files[:]  # Keep a copy for patch diffs
 
         iteration_count = 0
         max_iterations = 20
 
+        # We'll store a history of steps for the reasoning trace
+        steps = []
+
         while iteration_count < max_iterations:
             iteration_count += 1
-            log.info(f"Iteration {iteration_count} start")
+            step_info = {
+                "iteration": iteration_count,
+                "files_before": [f.copy() for f in files],
+                "dockerfile_before": dockerfile
+            }
 
             run_output = await workflow.step(
                 run_locally,
                 RunCodeInput(dockerfile=dockerfile, files=files),
                 start_to_close_timeout=timedelta(seconds=300)
             )
+            step_info["run_output"] = run_output.output
 
             val_output = await workflow.step(
                 validate_output,
@@ -59,26 +76,40 @@ class AutonomousCodingWorkflow:
                 start_to_close_timeout=timedelta(seconds=300)
             )
 
+            step_info["validate_result"] = val_output.result
+            step_info["files_after"] = val_output.files if val_output.files else []
+            steps.append(step_info)
+
+            # Compute patch from prev_files -> new files
+            patch_str = create_diff(prev_files, val_output.files or [])
+            prev_files = val_output.files or prev_files
+
             if val_output.result:
                 log.info("AutonomousCodingWorkflow completed successfully")
-                return True
+                # Return the final patch and entire step history
+                return {
+                    "success": True,
+                    "patch": patch_str,
+                    "steps": steps
+                }
             else:
-                changed_files = val_output.files if val_output.files else []
+                # If not done, update dockerfile & files in-memory
                 if val_output.dockerfile:
                     dockerfile = val_output.dockerfile
-
-                # Update the files list in-memory
+                changed_files = val_output.files or []
                 for changed_file in changed_files:
-                    changed_filename = changed_file["filename"]
-                    changed_content = changed_file["content"]
                     found = False
                     for i, existing_file in enumerate(files):
-                        if existing_file["filename"] == changed_filename:
-                            files[i]["content"] = changed_content
+                        if existing_file["filename"] == changed_file["filename"]:
+                            files[i]["content"] = changed_file["content"]
                             found = True
                             break
                     if not found:
-                        files.append({"filename": changed_filename, "content": changed_content})
+                        files.append(changed_file)
 
         log.warn("AutonomousCodingWorkflow reached max iterations without success")
-        return False
+        return {
+            "success": False,
+            "patch": "",
+            "steps": steps
+        }

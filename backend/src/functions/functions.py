@@ -2,7 +2,8 @@
 # This program is licensed under the Affero General Public License (AGPL).
 # See the LICENSE file for details.
 
-# src/functions/functions.py
+# ./backend/src/functions/functions.py
+
 from restack_ai.function import function, log
 from dataclasses import dataclass
 import os
@@ -10,6 +11,7 @@ import openai
 import json
 import tempfile
 import subprocess
+import difflib  # <--- NEW for patch generation
 
 from pydantic import BaseModel
 from typing import List, Optional
@@ -25,91 +27,17 @@ client = OpenAI(api_key=openai.api_key)
 class FileItem(BaseModel):
     filename: str
     content: str
-
     class Config:
         extra = "forbid"
-        schema_extra = {
-            "type": "object",
-            "properties": {
-                "filename": {"type": "string"},
-                "content": {"type": "string"}
-            },
-            "required": ["filename", "content"],
-            "additionalProperties": False
-        }
 
 class GenerateCodeSchema(BaseModel):
     dockerfile: str
     files: List[FileItem]
-    
-    class Config:
-        extra = "forbid"
-        schema_extra = {
-            "type": "object",
-            "properties": {
-                "dockerfile": {"type": "string"},
-                "files": {
-                    "type": "array",
-                    "items": {"$ref": "#/$defs/FileItem"}
-                }
-            },
-            "required": ["dockerfile", "files"],
-            "additionalProperties": False,
-            "$defs": {
-                "FileItem": {
-                    "type": "object",
-                    "properties": {
-                        "filename": {"type": "string"},
-                        "content": {"type": "string"}
-                    },
-                    "required": ["filename", "content"],
-                    "additionalProperties": False
-                }
-            }
-        }
 
 class ValidateOutputSchema(BaseModel):
     result: bool
     dockerfile: Optional[str] = None
     files: Optional[List[FileItem]] = None
-    
-    class Config:
-        extra = "forbid"
-        schema_extra = {
-            "type": "object",
-            "properties": {
-                "result": {"type": "boolean"},
-                "dockerfile": {
-                    "anyOf": [
-                        {"type": "string"},
-                        {"type": "null"}
-                    ]
-                },
-                "files": {
-                    "anyOf": [
-                        {
-                            "type": "array",
-                            "items": {"$ref": "#/$defs/FileItem"}
-                        },
-                        {"type": "null"}
-                    ]
-                }
-            },
-            "required": ["result", "dockerfile", "files"],
-            "additionalProperties": False,
-            "$defs": {
-                "FileItem": {
-                    "type": "object",
-                    "properties": {
-                        "filename": {"type": "string"},
-                        "content": {"type": "string"}
-                    },
-                    "required": ["filename", "content"],
-                    "additionalProperties": False
-                }
-            }
-        }
-
 
 @dataclass
 class GenerateCodeInput:
@@ -133,8 +61,14 @@ async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
     completion = client.beta.chat.completions.parse(
         model="gpt-4o-2024-08-06",
         messages=[
-            {"role": "system", "content": "You are the initial of an autonomous coding assistant agent. Generate complete code that will run."},
-            {"role": "user", "content": prompt}
+            {
+                "role": "system", 
+                "content": "You are the initial of an autonomous coding assistant agent. Generate complete code that will run."
+            },
+            {
+                "role": "user", 
+                "content": prompt
+            }
         ],
         response_format=GenerateCodeSchema
     )
@@ -147,7 +81,6 @@ async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
     files_list = [{"filename": f.filename, "content": f.content} for f in data.files]
 
     return GenerateCodeOutput(dockerfile=data.dockerfile, files=files_list)
-
 
 @dataclass
 class RunCodeInput:
@@ -165,7 +98,7 @@ async def run_locally(input: RunCodeInput) -> RunCodeOutput:
     with tempfile.TemporaryDirectory() as temp_dir:
         dockerfile_path = os.path.join(temp_dir, "Dockerfile")
         
-        # Write the Dockerfile
+        # Write Dockerfile
         with open(dockerfile_path, "w", encoding="utf-8") as f:
             f.write(input.dockerfile)
         
@@ -176,20 +109,19 @@ async def run_locally(input: RunCodeInput) -> RunCodeOutput:
             with open(file_path, "w", encoding="utf-8") as ff:
                 ff.write(file_item["content"])
         
-        # Build the Docker image
+        # Build image
         build_cmd = ["docker", "build", "-t", "myapp", temp_dir]
         build_process = subprocess.run(build_cmd, capture_output=True, text=True)
         if build_process.returncode != 0:
             return RunCodeOutput(output=build_process.stderr or build_process.stdout)
         
-        # Run the Docker container
+        # Run container
         run_cmd = ["docker", "run", "--rm", "myapp"]
         run_process = subprocess.run(run_cmd, capture_output=True, text=True)
         if run_process.returncode != 0:
             return RunCodeOutput(output=run_process.stderr or run_process.stdout)
         
         return RunCodeOutput(output=run_process.stdout)
-
 
 @dataclass
 class ValidateOutputInput:
@@ -220,8 +152,14 @@ async def validate_output(input: ValidateOutputInput) -> ValidateOutputOutput:
     completion = client.beta.chat.completions.parse(
         model="gpt-4o-2024-08-06",
         messages=[
-            {"role": "system", "content": "You are an iteration of an autonomous coding assistant agent. If you change any files, provide complete file content replacements. Append a brief explanation at the bottom of readme.md about what you tried."},
-            {"role": "user", "content": validation_prompt}
+            {
+                "role": "system", 
+                "content": "You are an iteration of an autonomous coding assistant agent. If you change any files, provide complete file content replacements. Append a brief explanation at the bottom of readme.md about what you tried."
+            },
+            {
+                "role": "user", 
+                "content": validation_prompt
+            }
         ],
         response_format=ValidateOutputSchema
     )
@@ -231,6 +169,34 @@ async def validate_output(input: ValidateOutputInput) -> ValidateOutputOutput:
         return ValidateOutputOutput(result=False)
 
     data = result.parsed
-    updated_files = [{"filename": f.filename, "content": f.content} for f in data.files] if data.files is not None else None
+    updated_files = [{"filename": f.filename, "content": f.content} for f in data.files] if data.files else None
 
     return ValidateOutputOutput(result=data.result, dockerfile=data.dockerfile, files=updated_files)
+
+#
+#  NEW HELPER FUNCTION to produce patch diffs
+#
+
+def create_diff(old_files: list, new_files: list) -> str:
+    """
+    Create a unified diff string from old_files to new_files.
+    Each is a list of dict {filename:..., content:...}.
+    """
+    old_map = {f["filename"]: f["content"].splitlines(keepends=True) for f in old_files}
+    new_map = {f["filename"]: f["content"].splitlines(keepends=True) for f in new_files}
+
+    all_names = set(old_map.keys()) | set(new_map.keys())
+    diff_text_parts = []
+
+    for fname in sorted(all_names):
+        old = old_map.get(fname, [])
+        new = new_map.get(fname, [])
+        diff = difflib.unified_diff(
+            old, new,
+            fromfile=f"a/{fname}",
+            tofile=f"b/{fname}"
+        )
+        diff_str = "".join(diff)
+        if diff_str.strip():
+            diff_text_parts.append(diff_str)
+    return "\n".join(diff_text_parts)
