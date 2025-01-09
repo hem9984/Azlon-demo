@@ -1,69 +1,99 @@
-#PROBLEM IS THAT RESTACK ENGINE RUNS ON localhost instead of 0.0.0.0 
-# which means that the other docker containers in the network cannot access it.
-# I have a working docker-compose.yml on "working-linux-only" branch, but it only works on linux operating systems
 services:
   restack-engine:
     image: ghcr.io/restackio/restack:main
-    container_name: restack
-    environment:
-      - RESTACK_ENGINE_ADDRESS=0.0.0.0:6233  # Ensure engine binds to 0.0.0.0
-    ports:
-      - "5233:5233" # GUI
-      - "6233:6233" # RPC
-      - "7233:7233" # Temporal
+    container_name: restack-engine
     restart: always
-    networks:
-      - restack-network
+    ports:
+      - "5233:5233"
+      - "6233:6233"
+      - "7233:7233"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # (Optional) environment variables for Restack engine go here if needed
+    # environment:
+    #   - FOO=bar
+    # volumes:
+    #   - restack_data:/path/in/container
 
   docker-dind:
     image: docker:24-dind
+    container_name: docker-dind
     privileged: true
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+    # Expose port 2375 so other containers can contact the Docker daemon
     ports:
       - "2375:2375"
-    networks:
-      - restack-network
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # 1) Bind-mount a folder on the host so that
+    #    anything written here persists after containers stop.
+    #    Change "./llm-output" to any accessible host path you like
+    #    (e.g., /Users/<username>/Desktop/llm-output on Mac).
+    volumes:
+      - type: bind
+        source: ./llm-output
+        target: /dind-mount
 
   backend:
     build: ./backend
-    environment:
-      - OPENAI_KEY=${OPENAI_KEY}
-      - DOCKER_HOST=tcp://docker-dind:2375
-      - RESTACK_ENGINE_ADDRESS=restack-engine:6233
+    container_name: backend
     depends_on:
       - restack-engine
       - docker-dind
     ports:
       - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - OPENAI_KEY=${OPENAI_KEY}
+      # Point backend at the DinD daemon and the Restack engine on host.docker.internal
+      - DOCKER_HOST=tcp://host.docker.internal:2375
+      - RESTACK_ENGINE_ADDRESS=host.docker.internal:6233
+      - RESTACK_TEMPORAL_ADDRESS=host.docker.internal:7233
+      # This env var tells the backend code where to store LLM outputs
+      - LLM_OUTPUT_DIR=/app/output
+    # 2) Bind-mount a host folder so the backend can write code artifacts
+    #    that remain visible on your host.
+    volumes:
+      - type: bind
+        source: ./llm-output
+        target: /app/output
     command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-    networks:
-      - restack-network
 
   worker:
     build: ./backend
-    environment:
-      - OPENAI_KEY=${OPENAI_KEY}
-      - DOCKER_HOST=tcp://docker-dind:2375
-      - RESTACK_ENGINE_ADDRESS=restack-engine:6233
-      - RESTACK_TEMPORAL_ADDRESS=restack-engine:7233
+    container_name: worker
     depends_on:
       - restack-engine
       - docker-dind
       - backend
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - OPENAI_KEY=${OPENAI_KEY}
+      - DOCKER_HOST=tcp://host.docker.internal:2375
+      - RESTACK_ENGINE_ADDRESS=host.docker.internal:6233
+      - RESTACK_TEMPORAL_ADDRESS=host.docker.internal:7233
+    # Worker does not necessarily need the volume mount
+    # unless you want it to read/write local artifacts as well.
+    # volumes:
+    #   - type: bind
+    #     source: ./llm-output
+    #     target: /app/output
     command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
-    networks:
-      - restack-network
 
   frontend:
     build: ./frontend
+    container_name: frontend
     depends_on:
       - backend
     ports:
-      - "3000:8080"
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: ["npm", "run", "dev"]
-    networks:
-      - restack-network
-  
-networks:
-  restack-network:
-    driver: bridge
+
+# Optional named volume if you prefer volumes instead of bind mounts:
+# volumes:
+#   restack_data:
+#   llm_data:
