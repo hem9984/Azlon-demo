@@ -52,6 +52,6 @@ services:
     depends_on:
       - backend
     # ports ignored but for reference:
-    # - "3000:8080"
+    # - "8080:8080"
     command: ["npm", "run", "dev"]
     network_mode: host
