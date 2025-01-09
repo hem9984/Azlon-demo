@@ -48,8 +48,8 @@ services:
       - OPENAI_KEY=${OPENAI_KEY}
       # Point backend at the DinD daemon and the Restack engine on host.docker.internal
       - DOCKER_HOST=tcp://host.docker.internal:2375
-      - RESTACK_ENGINE_ADDRESS=host.docker.internal:6233
-      - RESTACK_TEMPORAL_ADDRESS=host.docker.internal:7233
+      - RESTACK_ENGINE_ADDRESS=restack-engine:6233
+      - RESTACK_TEMPORAL_ADDRESS=restack-engine:7233
       # This env var tells the backend code where to store LLM outputs
       - LLM_OUTPUT_DIR=/app/output
     # 2) Bind-mount a host folder so the backend can write code artifacts
@@ -72,15 +72,15 @@ services:
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
       - DOCKER_HOST=tcp://host.docker.internal:2375
-      - RESTACK_ENGINE_ADDRESS=host.docker.internal:6233
-      - RESTACK_TEMPORAL_ADDRESS=host.docker.internal:7233
+      - RESTACK_ENGINE_ADDRESS=restack-engine:6233
+      - RESTACK_TEMPORAL_ADDRESS=restack-engine:7233
     # Worker does not necessarily need the volume mount
     # unless you want it to read/write local artifacts as well.
     # volumes:
     #   - type: bind
     #     source: ./llm-output
     #     target: /app/output
-    command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
+    command: ["sh", "-c", "sleep 20 && poetry run python -m src.services"]
 
   frontend:
     build: ./frontend
@@ -88,7 +88,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "3000:3000"
+      - "8080:8080"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["npm", "run", "dev"]
