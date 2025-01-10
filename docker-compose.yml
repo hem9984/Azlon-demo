@@ -1,30 +1,20 @@
 services:
-  ##################################################################
-  # 1) RESTACK ENGINE (with built-in proxy)
-  ##################################################################
   restack-engine:
     build:
-      context: .            # <--- point to project root
-      dockerfile: Dockerfile  # <--- the Dockerfile we just created
+      context: .
+      dockerfile: Dockerfile
     container_name: restack-engine
     restart: always
-    
-    # We only expose 443 (the sidecar proxy). If you also want 5233 or 6233 
-    # exposed on your host, you can keep them too. 
+
+    # We only need to expose 443 or 66233 if you want host access.
+    # If you want to curl from the host, you can do:
     ports:
-      - "443:443"    # so you can test from host on https://localhost or similar
-      - "5233:5233"  # restack engine's other ports if needed
-      - "6233:6233"
+      - "443:443"       # for external access to Temporal
+      - "65433:65433"   # for external access to engine gRPC
+      - "5233:5233"     # optional if there's a UI or something on 5233
 
-    # If the engine uses 127.0.0.1:7233, that's fine. 
-    # We do not directly open "7233:7233" to the outside because the sidecar is bridging it.
-
-  ##################################################################
-  # 2) DOCKER-IN-DOCKER
-  ##################################################################
   docker-dind:
     image: docker:24-dind
-    container_name: docker-dind
     privileged: true
     ports:
       - "2375:2375"
@@ -34,9 +24,6 @@ services:
         source: ./llm-output
         target: /dind-mount
 
-  ##################################################################
-  # 3) BACKEND (FastAPI)
-  ##################################################################
   backend:
     build: ./backend
     container_name: backend
@@ -47,31 +34,20 @@ services:
       - "8000:8000"
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
-      # Points to docker-dind
       - DOCKER_HOST=tcp://docker-dind:2375
-      #
-      # Because we run the engine + sidecar in one container, 
-      # the engine is reachable at restack-engine:443 for Temporal.
-      # If your code doesn't require 443 specifically, you can do restack-engine:6233 
-      # for other calls. But if your Node snippet is forcing :443, use the sidecar!
-      #
-      # For your python logic:
-      - RESTACK_ENGINE_ADDRESS=restack-engine:6233
+      # If your Python code in main.py references RESTACK_ENGINE_ADDRESS for gRPC:
+      - RESTACK_ENGINE_ADDRESS=restack-engine:65433
+      # If your Python code references RESTACK_TEMPORAL_ADDRESS for Temporal:
       - RESTACK_TEMPORAL_ADDRESS=restack-engine:443
       - RESTACK_ENGINE_ID=local
       - RESTACK_ENGINE_API_KEY=
       - LLM_OUTPUT_DIR=/app/output
-
     volumes:
       - type: bind
         source: ./llm-output
         target: /app/output
-
     command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
-  ##################################################################
-  # 4) WORKER
-  ##################################################################
   worker:
     build: ./backend
     container_name: worker
@@ -82,19 +58,18 @@ services:
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
       - DOCKER_HOST=tcp://docker-dind:2375
-
-      # If your Node snippet appends :443 to RESTACK_ENGINE_ADDRESS=restack-engine,
-      # that becomes restack-engine:443 => hits the sidecar => engine
-      - RESTACK_ENGINE_ADDRESS=restack-engine
+      #
+      # If the Node snippet says "engineAddress = process.env.RESTACK_ENGINE_ADDRESS + ':443'", 
+      # we must set RESTACK_ENGINE_ADDRESS=restack-engine so it becomes "restack-engine:443"
+      # for Temporal. If that same snippet also tries for the engine gRPC, we might need 
+      # a separate env var. But let's assume the Python side is the main user of engine gRPC:
+      #
+      - RESTACK_ENGINE_ADDRESS=restack-engine:65433
+      - RESTACK_TEMPORAL_ADDRESS=restack-engine:443
       - RESTACK_ENGINE_ID=dev
       - RESTACK_ENGINE_API_KEY=
-      - RESTACK_TEMPORAL_ADDRESS=restack-engine:443
-
     command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
 
-  ##################################################################
-  # 5) FRONTEND
-  ##################################################################
   frontend:
     build: ./frontend
     container_name: frontend
