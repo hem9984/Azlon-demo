@@ -16,8 +16,8 @@ from src.workflows.workflow import AutonomousCodingWorkflow
 # Path to your local swe-bench fork
 SWE_BENCH_BASE = "/home/harrison/experiments"
 # Our submission folder per SWE-bench instructions
-SUBMISSION_DATE_MODEL = "20250108_Azlon_gpt4o"
-SUBMISSION_DIR = os.path.join(SWE_BENCH_BASE, "evaluation", "lite", SUBMISSION_DATE_MODEL)
+SUBMISSION_DATE_MODEL = "20250110_Azlon_gpt4o"
+SUBMISSION_DIR = os.path.join(SWE_BENCH_BASE, "evaluation", "verified", SUBMISSION_DATE_MODEL)
 LOGS_DIR = os.path.join(SUBMISSION_DIR, "logs")
 TRAJS_DIR = os.path.join(SUBMISSION_DIR, "trajs")
 ALL_PREDS_FILE = os.path.join(SUBMISSION_DIR, "all_preds.jsonl")

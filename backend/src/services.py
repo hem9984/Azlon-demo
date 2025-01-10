@@ -7,6 +7,7 @@ from src.workflows.workflow import AutonomousCodingWorkflow
 async def main():
     await client.start_service(
         workflows=[AutonomousCodingWorkflow],
+        # we need 2 workflows now
         functions=[generate_code, run_locally, validate_output],
     )
 
