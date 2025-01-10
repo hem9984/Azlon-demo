@@ -13,6 +13,8 @@ from restack_ai.restack import CloudConnectionOptions
 
 RESTACK_ENGINE_ADDRESS = os.getenv('RESTACK_ENGINE_ADDRESS')
 RESTACK_TEMPORAL_ADDRESS = os.getenv('RESTACK_TEMPORAL_ADDRESS')
+RESTACK_ENGINE_ID = os.getenv('RESTACK_ENGINE_ID')
+RESTACK_ENGINE_API_KEY = os.getenv('RESTACK_ENGINE_API_KEY')
 
 app = FastAPI()
 
@@ -47,14 +49,14 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"error": "Internal Server Error."},
-        headers={"Access-Control-Allow-Origin": "http://localhost:3000"},
+        headers={"Access-Control-Allow-Origin": "http://localhost:8080"},
     )
 
 @app.post("/run_workflow")
 async def run_workflow(params: UserInput):
     connection_options = CloudConnectionOptions(
-    engine_id="local",
-    api_key=None,
+    engine_id=RESTACK_ENGINE_ID,
+    api_key=RESTACK_ENGINE_API_KEY,
     address=RESTACK_TEMPORAL_ADDRESS,
     api_address=RESTACK_ENGINE_ADDRESS,
     temporal_namespace="default")
