@@ -2,56 +2,53 @@ services:
   restack-engine:
     image: ghcr.io/restackio/restack:main
     container_name: restack
-    #environment:
-    # ports are ignored with network_mode: host, but you can list them for reference:
-    # - "5233:5233"
-    # - "6233:6233"
-    # - "7233:7233"
     restart: always
-    network_mode: host
+    networks:
+      - restack-network
 
   docker-dind:
     image: docker:24-dind
     privileged: true
     command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
-    # ports are ignored in host mode, but for reference:
-    # - "2375:2375"
-    network_mode: host
+    networks:
+      - restack-network
 
   backend:
     build: ./backend
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
-      # Since we are on host network now, docker-dind is also on host network:
-      - DOCKER_HOST=tcp://localhost:2375
-      - RESTACK_ENGINE_ADDRESS=localhost:6233
+      - DOCKER_HOST=tcp://host.docker.internal:2375
+      - RESTACK_ENGINE_ADDRESS=host.docker.internal:6233
     depends_on:
       - restack-engine
       - docker-dind
-    # ports ignored but for reference:
-    # - "8000:8000"
     command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-    network_mode: host
+    networks:
+      - restack-network
 
   worker:
     build: ./backend
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
-      - DOCKER_HOST=tcp://localhost:2375
-      - RESTACK_ENGINE_ADDRESS=localhost:6233
-      - RESTACK_TEMPORAL_ADDRESS=localhost:7233
+      - DOCKER_HOST=tcp://host.docker.internal:2375
+      - RESTACK_ENGINE_ADDRESS=host.docker.internal:6233
+      - RESTACK_TEMPORAL_ADDRESS=host.docker.internal:7233
     depends_on:
       - restack-engine
       - docker-dind
       - backend
     command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
-    network_mode: host
+    networks:
+      - restack-network
 
   frontend:
     build: ./frontend
     depends_on:
       - backend
-    # ports ignored but for reference:
-    # - "8080:8080"
     command: ["npm", "run", "dev"]
-    network_mode: host
+    networks:
+      - restack-network
+
+networks:
+  restack-network:
+    driver: bridge
