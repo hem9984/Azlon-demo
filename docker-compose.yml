@@ -1,173 +1,54 @@
 services:
   restack-engine:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: restack-engine
+    image: ghcr.io/restackio/restack:main
+    container_name: restack
     restart: always
-
-    # We only need to expose 443 or 66233 if you want host access.
-    # If you want to curl from the host, you can do:
-    ports:
-      - "443:443"       # for external access to Temporal
-      - "65433:65433"   # for external access to engine gRPC
-      - "5233:5233"     # optional if there's a UI or something on 5233
+    networks:
+      - restack-network
 
   docker-dind:
     image: docker:24-dind
     privileged: true
-    ports:
-      - "2375:2375"
     command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
-    volumes:
-      - type: bind
-        source: ./llm-output
-        target: /dind-mount
+    networks:
+      - restack-network
 
   backend:
     build: ./backend
-    container_name: backend
+    environment:
+      - OPENAI_KEY=${OPENAI_KEY}
+      - DOCKER_HOST=tcp://host.docker.internal:2375
+      - RESTACK_ENGINE_ADDRESS=host.docker.internal:6233
     depends_on:
       - restack-engine
       - docker-dind
-    ports:
-      - "8000:8000"
-    environment:
-      - OPENAI_KEY=${OPENAI_KEY}
-      - DOCKER_HOST=tcp://docker-dind:2375
-      # If your Python code in main.py references RESTACK_ENGINE_ADDRESS for gRPC:
-      - RESTACK_ENGINE_ADDRESS=restack-engine:65433
-      # If your Python code references RESTACK_TEMPORAL_ADDRESS for Temporal:
-      - RESTACK_TEMPORAL_ADDRESS=restack-engine:443
-      - RESTACK_ENGINE_ID=local
-      - RESTACK_ENGINE_API_KEY=
-      - LLM_OUTPUT_DIR=/app/output
-    volumes:
-      - type: bind
-        source: ./llm-output
-        target: /app/output
     command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    networks:
+      - restack-network
 
   worker:
     build: ./backend
-    container_name: worker
+    environment:
+      - OPENAI_KEY=${OPENAI_KEY}
+      - DOCKER_HOST=tcp://host.docker.internal:2375
+      - RESTACK_ENGINE_ADDRESS=host.docker.internal:6233
+      - RESTACK_TEMPORAL_ADDRESS=host.docker.internal:7233
     depends_on:
       - restack-engine
       - docker-dind
       - backend
-    environment:
-      - OPENAI_KEY=${OPENAI_KEY}
-      - DOCKER_HOST=tcp://docker-dind:2375
-      #
-      # If the Node snippet says "engineAddress = process.env.RESTACK_ENGINE_ADDRESS + ':443'", 
-      # we must set RESTACK_ENGINE_ADDRESS=restack-engine so it becomes "restack-engine:443"
-      # for Temporal. If that same snippet also tries for the engine gRPC, we might need 
-      # a separate env var. But let's assume the Python side is the main user of engine gRPC:
-      #
-      - RESTACK_ENGINE_ADDRESS=restack-engine:65433
-      - RESTACK_TEMPORAL_ADDRESS=restack-engine:443
-      - RESTACK_ENGINE_ID=dev
-      - RESTACK_ENGINE_API_KEY=
     command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
+    networks:
+      - restack-network
 
   frontend:
     build: ./frontend
-    container_name: frontend
     depends_on:
       - backend
-    ports:
-      - "8080:8080"
     command: ["npm", "run", "dev"]
+    networks:
+      - restack-network
 
-
-# version: '3.8'
-
-# services:
-#   restack-engine:
-#     image: ghcr.io/restackio/restack:main
-#     container_name: restack-engine
-#     restart: always
-
-#     # We still publish the HTTP ports normally:
-#     ports:
-#       - "5233:5233"   # RESTACK HTTP/UI
-#       - "6233:6233"   # RESTACK gRPC
-#       # Remove the direct "7233:7233", replace with "443:7233"
-#       # so external traffic on host's port 443 -> container's port 7233
-#       - "443:7233"
-
-#     # No extra environment or host config here — but
-#     # if Restack engine is binding only to 127.0.0.1, this still won’t work.
-#     # Ideally, it should bind 0.0.0.0 so that container-to-container traffic can reach port 7233.
-
-#   docker-dind:
-#     image: docker:24-dind
-#     container_name: docker-dind
-#     privileged: true
-#     ports:
-#       - "2375:2375"
-#     command: ["dockerd", "--host=tcp://localhost:2375", "--tls=false"]
-#     volumes:
-#       - type: bind
-#         source: ./llm-output
-#         target: /dind-mount
-
-#   backend:
-#     build: ./backend
-#     container_name: backend
-#     depends_on:
-#       - restack-engine
-#       - docker-dind
-#     ports:
-#       - "8000:8000"
-#     environment:
-#       - OPENAI_KEY=${OPENAI_KEY}
-#       # So backend can talk to Docker in 'docker-dind' container
-#       - DOCKER_HOST=tcp://docker-dind:2375
-#       # We'll still set RESTACK_TEMPORAL_ADDRESS for your CloudConnectionOptions usage,
-#       # but note that your Node-based code might ignore it or do something else.
-#       - RESTACK_TEMPORAL_ADDRESS=restack-engine:443
-#       - RESTACK_ENGINE_ADDRESS=restack-engine:6233
-#       - LLM_OUTPUT_DIR=/app/output
-#     volumes:
-#       - type: bind
-#         source: ./llm-output
-#         target: /app/output
-#     command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-
-#   worker:
-#     build: ./backend
-#     container_name: worker
-#     depends_on:
-#       - restack-engine
-#       - docker-dind
-#       - backend
-#     environment:
-#       - OPENAI_KEY=${OPENAI_KEY}
-#       - DOCKER_HOST=tcp://docker-dind:2375
-      
-#       # === CRITICAL ENV OVERRIDES FOR THE NODE CODE (the snippet you found) ===
-#       #
-#       # If your code checks `RESTACK_ENGINE_ADDRESS` and appends ":443",
-#       # then we can just pass "restack-engine" so the final becomes "restack-engine:443".
-#       - RESTACK_ENGINE_ADDRESS=restack-engine
-#       # Use "dev" or anything != "local" if you want to skip TLS but still get :443 appended
-#       - RESTACK_ENGINE_ID=dev  
-#       # (If you keep "engineId = local", that snippet might do "localhost:7233" fallback.)
-#       #
-#       # If you do not set an API key, it won't go TLS mode:
-#       - RESTACK_ENGINE_API_KEY=
-      
-#       # For your python code that uses CloudConnectionOptions in main.py:
-#       - RESTACK_TEMPORAL_ADDRESS=restack-engine:443
-
-#     command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
-
-#   frontend:
-#     build: ./frontend
-#     container_name: frontend
-#     depends_on:
-#       - backend
-#     ports:
-#       - "8080:8080"
-#     command: ["npm", "run", "dev"]
+networks:
+  restack-network:
+    driver: bridge
