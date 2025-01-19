@@ -11,7 +11,7 @@ echo "OPENAI_KEY=sk-..." > .env
 ```
 docker compose up
 ```
-* Frontend UI: http://localhost:3000/
+* Frontend UI: http://localhost:8080/
 * (Optional) Restack UI: http://localhost:5233/
 
 ### Usage in Frontend UI
