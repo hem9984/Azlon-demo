@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   restack-engine:
     image: ghcr.io/restackio/restack:main
@@ -5,6 +7,10 @@ services:
     restart: always
     networks:
       - restack-network
+    ports:
+      - "5233:5233"
+      - "6233:6233"
+      - "7233:7233"
 
   docker-dind:
     image: docker:24-dind
@@ -12,6 +18,10 @@ services:
     command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
     networks:
       - restack-network
+    volumes:
+      - type: bind
+        source: ./llm-output
+        target: /dind-mount
 
   backend:
     build: ./backend
@@ -19,12 +29,19 @@ services:
       - OPENAI_KEY=${OPENAI_KEY}
       - DOCKER_HOST=tcp://docker-dind:2375
       - RESTACK_ENGINE_ADDRESS=http://restack:6233
+      - LLM_OUTPUT_DIR=/app/output
     depends_on:
       - restack-engine
       - docker-dind
     command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
     networks:
       - restack-network
+    volumes:
+      - type: bind
+        source: ./llm-output
+        target: /app/output
+    ports:
+      - "8000:8000"
 
   worker:
     build: ./backend
@@ -37,7 +54,7 @@ services:
       - restack-engine
       - docker-dind
       - backend
-    command: ["sh", "-c", "sleep 10 && poetry run python -m src.services"]
+    command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
     networks:
       - restack-network
 
@@ -48,6 +65,8 @@ services:
     command: ["npm", "run", "dev"]
     networks:
       - restack-network
+    ports:
+      - "8080:8080"
 
 networks:
   restack-network:
