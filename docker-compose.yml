@@ -19,7 +19,7 @@ services:
     volumes:
       - type: bind
         source: ./llm-output
-        target: /dind-mount
+        target: /app/output
 
   backend:
     build: ./backend
