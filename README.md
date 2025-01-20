@@ -1,18 +1,105 @@
 # Autonomous Coding Workflow
-## TLDR 🔴
+### 1. Prerequisites
+Python 3.10+
+Python Downloads
+On macOS, you can also install via Homebrew:
+bash
+```
+brew install python@3.10
+```
+Poetry (for Python dependency management)
+Official install instructions: Poetry Installation
+Example one-liner (works on Windows, macOS, Linux):
+bash
+```
+curl -sSL https://install.python-poetry.org | python3 -
+```
+Make sure poetry is on your PATH; see Poetry docs for details.
+Node.js 16+
+Node Downloads
+Or install via nvm or your OS package manager.
+### 2. Install Docker Engine.
+
+### 3. Repository Setup
+Clone the repository:
+bash
 ```
 git clone https://github.com/hem9984/Azlon-demo.git
 cd Azlon-demo
-git switch linux-working-only
 ```
+Set up environment variables:
+Create a file named .env at the root of the project:
+bash
 ```
 echo "OPENAI_KEY=sk-..." > .env
 ```
+Replace sk-... with your actual OpenAI API key.
+### 4. Backend Setup (Poetry / Python)
+Install dependencies:
+
+bash
 ```
-docker compose up
+cd backend
+poetry install
 ```
+This will create and populate a virtual environment with all dependencies listed in pyproject.toml.
+
+Run the backend server (Uvicorn):
+
+bash
+```
+poetry run uvicorn main:app --host 0.0.0.0 --port 8000
+```
+By default, it will start listening on http://localhost:8000.
+Run the worker service:
+
+bash
+```
+poetry run python -m src.services
+```
+The worker might need to connect to the Restack engine or other services. Make sure you configure any additional environment variables as needed in your .env.
+Note
+If you see deprecation warnings such as "dev-dependencies" section is deprecated..., you can ignore them for now or update your pyproject.toml accordingly.
+
+### 5. Frontend Setup (Node / npm)
+Install Node dependencies:
+bash
+```
+cd ../frontend
+npm install
+```
+Start the development server:
+bash
+```
+npm run dev
+```
+By default, it will start on http://localhost:8080, but check the terminal output to confirm.
+# TLDR (you have all prereqs)
+Start the backend:
+bash
+```
+# In one terminal
+cd Azlon-demo/backend
+poetry run uvicorn main:app --host 0.0.0.0 --port 8000
+```
+Start the worker:
+bash
+```
+# In another terminal
+cd Azlon-demo/backend
+poetry run python -m src.services
+```
+Start the frontend:
+bash
+```
+# In a third terminal
+cd Azlon-demo/frontend
+npm run dev
+```
+Open the Frontend UI in your browser:
+Visit http://localhost:8080 (or whatever port you see in your terminal).
 * Frontend UI: http://localhost:8080/
-* (Optional) Restack UI: http://localhost:5233/
+* Restack UI: http://localhost:5233/
 
 ### Usage in Frontend UI
 1. Enter your user_prompt and test_conditions.
@@ -22,73 +109,3 @@ docker compose up
 -------------------------------------------------------------
 ## Overview
 This project sets up an autonomous coding workflow using Restack, OpenAI’s GPT models, Docker-in-Docker for building and running Docker images, and a frontend React UI to interact with the system. Users can provide a user_prompt and test_conditions to generate code automatically, run it in a containerized environment, and validate the results. Users can also toggle an "advanced mode" to edit system prompts directly.
-
-## Prerequisites
-### Docker & Docker Compose:
-* Ensure Docker (>= 20.10) and Docker Compose (>= 1.29) are installed.
-* Install Docker | Install Docker Compose
-
-### OpenAI API Key:
-* Sign up for OpenAI and get an API key: OpenAI API Keys
-
-# Setup Instructions
-
-1. Clone the Repository:
-bash
-```
-git clone https://github.com/hem9984/Azlon-demo.git
-cd Azlon-demo
-```
-
-2. Environment Variables: Create a .env file in the project root. Add your OpenAI key:
-bash
-```
-echo "OPENAI_KEY=sk-..." > .env
-```
-* Ensure this .env file contains OPENAI_KEY.
-
-## Build & Run the Full Stack with Docker Compose: 
-
-### The docker-compose.yml orchestrates:
-
-* restack-engine
-* docker-dind (Docker-in-Docker)
-* backend (FastAPI + Restack)
-* frontend (React UI)
-
-3. Start them all with one command:
-bash
-```
-docker compose up
-```
-### This will:
-
-* Run Restack engine on http://localhost:5233 (and other ports as specified).
-* Run the backend on http://localhost:8000
-* Run the frontend on http://localhost:3000
-* Check the docker-compose.yml and frontend/Dockerfile for the final frontend port and mode.
-
-# SETUP DONE! YOU ARE READY TO USE 🎊
-
-## Accessing the Application (open these two links in web browser windows):
-
-#### Restack UI: http://localhost:5233/
-The Restack UI will show you running workflows and other details.
-
-#### Frontend UI: http://localhost:3000/
-The React UI lets you enter your user_prompt and test_conditions. If you enable advanced mode in the GUI, you can edit system prompts as well.
-
-
-
-# Usage
-1. Open the frontend URL (http://localhost:3000/) in your browser.
-   a. Also open http://localhost:5233/ if you want to view the process in real-time!
-2.  Enter your user_prompt and test_conditions.
-   a. Toggle advanced mode if you want to modify the system prompts.
-3. Click "Run Workflow".
-
-#### The application will:
-* Use your prompts to generate code and a Docker environment.
-* Build and run the generated code in a container.
-* Validate the output against test_conditions.
-* Display the results in the frontend UI.
