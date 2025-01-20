@@ -47,7 +47,17 @@ poetry install
 ```
 This will create and populate a virtual environment with all dependencies listed in pyproject.toml.
 
+run restack container:
+```
+docker run -d --pull always --name restack -p 5233:5233 -p 6233:6233 -p 7233:7233 ghcr.io/restackio/restack:main
+```
+
 Run the backend server (Uvicorn):
+
+bash
+```
+poetry run python -m src.services
+```
 
 bash
 ```
@@ -56,13 +66,6 @@ poetry run uvicorn main:app --host 0.0.0.0 --port 8000
 By default, it will start listening on http://localhost:8000.
 Run the worker service:
 
-bash
-```
-poetry run python -m src.services
-```
-The worker might need to connect to the Restack engine or other services. Make sure you configure any additional environment variables as needed in your .env.
-Note
-If you see deprecation warnings such as "dev-dependencies" section is deprecated..., you can ignore them for now or update your pyproject.toml accordingly.
 
 ### 5. Frontend Setup (Node / npm)
 Install Node dependencies:
@@ -78,6 +81,10 @@ npm run dev
 ```
 By default, it will start on http://localhost:8080, but check the terminal output to confirm.
 # TLDR (you have all prereqs)
+run restack container:
+```
+docker run -d --pull always --name restack -p 5233:5233 -p 6233:6233 -p 7233:7233 ghcr.io/restackio/restack:main
+```
 Start the backend:
 bash
 ```
