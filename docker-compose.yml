@@ -28,6 +28,8 @@ services:
       - DOCKER_HOST=tcp://docker-dind:2375
       - RESTACK_ENGINE_ADDRESS=http://restack:6233
       - RESTACK_TEMPORAL_ADDRESS=http://restack:7233
+      - RESTACK_ENGINE_ID = "local"
+      - RESTACK_ENGINE_API_KEY = None
       - LLM_OUTPUT_DIR=/app/output
     depends_on:
       - restack-engine
@@ -49,6 +51,8 @@ services:
       - DOCKER_HOST=tcp://docker-dind:2375
       - RESTACK_ENGINE_ADDRESS=http://restack:6233
       - RESTACK_TEMPORAL_ADDRESS=http://restack:7233
+      - RESTACK_ENGINE_ID = "local"
+      - RESTACK_ENGINE_API_KEY = None
     depends_on:
       - restack-engine
       - docker-dind
