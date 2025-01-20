@@ -40,7 +40,10 @@ Install dependencies:
 bash
 ```
 cd backend
+poetry lock
+poetry env use 3.10 && poetry env activate
 poetry install
+
 ```
 This will create and populate a virtual environment with all dependencies listed in pyproject.toml.
 
