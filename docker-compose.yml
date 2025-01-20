@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   restack-engine:
     image: ghcr.io/restackio/restack:main
