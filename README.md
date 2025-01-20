@@ -64,7 +64,7 @@ docker compose up
 
 * Run Restack engine on http://localhost:5233 (and other ports as specified).
 * Run the backend on http://localhost:8000
-* Run the frontend on http://localhost:3000
+* Run the frontend on http://localhost:8080
 * Check the docker-compose.yml and frontend/Dockerfile for the final frontend port and mode.
 
 # SETUP DONE! YOU ARE READY TO USE 🎊
@@ -74,7 +74,7 @@ docker compose up
 #### Restack UI: http://localhost:5233/
 The Restack UI will show you running workflows and other details.
 
-#### Frontend UI: http://localhost:3000/
+#### Frontend UI: http://localhost:8080/
 The React UI lets you enter your user_prompt and test_conditions. If you enable advanced mode in the GUI, you can edit system prompts as well.
 
 
