@@ -1,4 +1,4 @@
-# backend/src/prompts.py
+# ./backend/src/prompts.py
 
 # Store defaults here
 default_generate_code_prompt = """You are an autonomous coding agent.
