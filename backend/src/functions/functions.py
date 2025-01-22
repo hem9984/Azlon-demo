@@ -178,6 +178,7 @@ async def run_locally(input: RunCodeInput) -> RunCodeOutput:
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, "w", encoding="utf-8") as ff:
             ff.write(file_item["content"])
+            log.info(f"Writing file {file_item['filename']} to {file_path}")
     
     # Now run docker build, connecting to Docker-in-Docker at DOCKER_HOST
     build_cmd = ["docker", "build", "-t", "myapp", run_folder]
@@ -186,7 +187,7 @@ async def run_locally(input: RunCodeInput) -> RunCodeOutput:
         return RunCodeOutput(output=build_process.stderr or build_process.stdout)
     
     # Then run the container
-    run_cmd = ["docker", "run", "--rm", "myapp"]
+    run_cmd = ["docker", "run", "--rm" "myapp"]
     run_process = subprocess.run(run_cmd, capture_output=True, text=True)
     if run_process.returncode != 0:
         return RunCodeOutput(output=run_process.stderr or run_process.stdout)
