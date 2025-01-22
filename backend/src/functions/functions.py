@@ -187,7 +187,7 @@ async def run_locally(input: RunCodeInput) -> RunCodeOutput:
         return RunCodeOutput(output=build_process.stderr or build_process.stdout)
     
     # Then run the container
-    run_cmd = ["docker", "run", "--rm" "myapp"]
+    run_cmd = ["docker", "run", "--rm", "myapp"]
     run_process = subprocess.run(run_cmd, capture_output=True, text=True)
     if run_process.returncode != 0:
         return RunCodeOutput(output=run_process.stderr or run_process.stdout)
