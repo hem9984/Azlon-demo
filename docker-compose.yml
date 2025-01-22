@@ -17,9 +17,7 @@ services:
     networks:
       - restack-network
     volumes:
-      - type: bind
-        source: ./llm-output
-        target: /app/output
+      - ./llm-output:/app/output:rw
 
   backend:
     build: ./backend
@@ -38,9 +36,7 @@ services:
     networks:
       - restack-network
     volumes:
-      - type: bind
-        source: ./llm-output
-        target: /app/output
+      - ./llm-output:/app/output:rw
     ports:
       - "8000:8000"
 
@@ -53,6 +49,7 @@ services:
       - RESTACK_TEMPORAL_ADDRESS=http://restack:7233
       - RESTACK_ENGINE_ID = "local"
       - RESTACK_ENGINE_API_KEY = None
+      - LLM_OUTPUT_DIR=/app/output
     depends_on:
       - restack-engine
       - docker-dind
@@ -60,6 +57,8 @@ services:
     command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
     networks:
       - restack-network
+    volumes:
+      - ./llm-output:/app/output:rw
 
   frontend:
     build: ./frontend

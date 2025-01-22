@@ -1,6 +1,7 @@
 # --------------------
 # General OS & Editor
 # --------------------
+/llm-output/
 *.swp
 *.swo
 .DS_Store
