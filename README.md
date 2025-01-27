@@ -14,11 +14,12 @@ docker compose up --build
 ```
 * Frontend UI: http://localhost:8080/
 * Restack UI: http://localhost:5233/
+* Default output directory: ./Azlon-demo/llm-output
 
 ### Usage in Frontend UI
-1. Enter your user_prompt and test_conditions. Optionally, add the files you wish it to start with in <PATH TO>/llm-output/input
+1. Enter your user_prompt and test_conditions. Optionally, add the files you wish it to start with in PATH_TO/llm-output/input
 2. Click "Run Workflow".
-3. Wait for your project code to complete! The final files will be saved to <PATH TO>/llm-output/<TIMESTAMPT OF WORKFLOW> on your local machine.
+3. Wait for your project code to complete! The final files will be saved to PATH_TO/llm-output/TIMESTAMP_OF_WORKFLOW on your local machine.
 * 🤖 It will recursively generate code, run the code, and fix the code if needed until it deems that your test case(s) are fulfilled. 
 -------------------------------------------------------------
 ## Overview
