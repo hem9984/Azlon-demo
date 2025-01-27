@@ -1,16 +1,19 @@
-# ./backend/src/services.py
+#./backend/src/services.py
 import traceback
 import asyncio
 import time
 from src.client import client
-from src.functions.functions import generate_code, run_locally, validate_output
+# Import all your function references
+from src.functions.functions import (
+    generate_code, run_locally, validate_output, pre_flight_run
+)
 from src.workflows.workflow import AutonomousCodingWorkflow
 
 async def main():
     try:
         await client.start_service(
             workflows=[AutonomousCodingWorkflow],
-            functions=[generate_code, run_locally, validate_output],
+            functions=[generate_code, run_locally, validate_output, pre_flight_run],
         )
     except Exception as e:
         print(f"Error starting service: traceback: {traceback.format_exc()}")

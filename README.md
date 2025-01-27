@@ -3,7 +3,9 @@
 ```
 git clone https://github.com/hem9984/Azlon-demo.git
 cd Azlon-demo
+mkdir ./llm-output
 ```
+* llm-output directory can be anywhere on your computer, but then you have to edit the docker-compose.yml to your desired file path
 ```
 echo "OPENAI_KEY=sk-..." > .env
 ```

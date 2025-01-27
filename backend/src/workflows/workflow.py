@@ -1,12 +1,14 @@
-# ./backend/src/workflows/workflow.py
+#./backend/src/workflows/workflow.py
 from restack_ai.workflow import workflow, import_functions, log
 from dataclasses import dataclass
 from datetime import timedelta
-from datetime import datetime
+import os
 
 with import_functions():
-    from src.functions.functions import generate_code, run_locally, validate_output
-    from src.functions.functions import GenerateCodeInput, RunCodeInput, ValidateOutputInput
+    from src.functions.functions import (
+        generate_code, run_locally, validate_output, pre_flight_run,
+        GenerateCodeInput, RunCodeInput, ValidateOutputInput, PreFlightOutput
+    )
 
 @dataclass
 class WorkflowInputParams:
@@ -19,10 +21,40 @@ class AutonomousCodingWorkflow:
     async def run(self, input: WorkflowInputParams):
         log.info("AutonomousCodingWorkflow started", input=input)
 
+        # 0) OPTIONAL PRE-FLIGHT STEP
+        # If user has placed files in ./llm-output/input, let's build/run them once
+        input_dir = os.path.join(os.environ.get("LLM_OUTPUT_DIR", "/app/output"), "input")
+        has_user_files = False
+        if os.path.isdir(input_dir):
+            for root, dirs, files in os.walk(input_dir):
+                if files:
+                    has_user_files = True
+                    break
+
+        pre_flight_result = None
+        if has_user_files:
+            log.info("Pre-flight: found user-provided code. Let's build/run it to see what happens.")
+            pre_flight_result: PreFlightOutput = await workflow.step(
+                pre_flight_run,
+                start_to_close_timeout=timedelta(seconds=300)
+            )
+            log.info("Pre-flight completed. Output:\n" + pre_flight_result.run_output)
+
+        # 1) Generate code (first iteration).
+        # If we have pre-flight info, inject it into the user's prompt
+        pre_flight_output_text = ""
+        if pre_flight_result:
+            pre_flight_output_text = (
+                f"\n\nWe ran the user-provided code. The container output was:\n\n"
+                f"{pre_flight_result.run_output}\n\n"
+                f"The code structure is:\n{pre_flight_result.dir_tree}\n\n"
+                "Please modify or create a Dockerfile if needed, and adjust the code to meet new test conditions.\n"
+            )
+
         gen_output = await workflow.step(
             generate_code,
             GenerateCodeInput(
-                user_prompt=input.user_prompt,
+                user_prompt=input.user_prompt + pre_flight_output_text,
                 test_conditions=input.test_conditions
             ),
             start_to_close_timeout=timedelta(seconds=300)
@@ -50,7 +82,8 @@ class AutonomousCodingWorkflow:
                     dockerfile=dockerfile,
                     files=files,
                     output=run_output.output,
-                    test_conditions=input.test_conditions
+                    test_conditions=input.test_conditions,
+                    iteration=iteration_count  # pass iteration
                 ),
                 start_to_close_timeout=timedelta(seconds=300)
             )
@@ -63,7 +96,7 @@ class AutonomousCodingWorkflow:
                 if val_output.dockerfile:
                     dockerfile = val_output.dockerfile
 
-                # Update the files list in-memory
+                # Merge changes in memory
                 for changed_file in changed_files:
                     changed_filename = changed_file["filename"]
                     changed_content = changed_file["content"]
