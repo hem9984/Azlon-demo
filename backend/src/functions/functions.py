@@ -16,7 +16,7 @@ from src.utils.file_handling import (
     initialize_git_repo,
     prepare_codebase_merge,
     collect_input_files,
-    build_files_str  # <--- new utility for partial vs. full
+    build_files_str
 )
 
 openai.api_key = os.environ.get("OPENAI_KEY")
@@ -136,7 +136,7 @@ class ValidateOutputInput:
     files: list
     output: str
     test_conditions: str
-    iteration: int  # <--- new field to indicate iteration index
+    iteration: int
 
 @dataclass
 class ValidateOutputOutput:
@@ -145,7 +145,7 @@ class ValidateOutputOutput:
     files: Optional[list] = None
 
 #
-# 1) generate_code
+# generate_code
 #
 @function.defn()
 async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
@@ -181,7 +181,7 @@ async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
     return GenerateCodeOutput(dockerfile=data.dockerfile, files=files_list)
 
 #
-# 2) run_locally
+# run_locally
 #
 @function.defn()
 async def run_locally(input: RunCodeInput) -> RunCodeOutput:
@@ -199,10 +199,13 @@ async def run_locally(input: RunCodeInput) -> RunCodeOutput:
         f.write(input.dockerfile)
     log.info(f"Wrote Dockerfile to {dockerfile_path}")
 
-    # Initialize Git for merging
+    # Initialize Git
     initialize_git_repo(run_folder)
-    subprocess.run(["git", "add", "-A"], cwd=run_folder, check=True)
-    subprocess.run(["git", "commit", "-m", "Initial Dockerfile commit"], cwd=run_folder, check=True)
+    # We'll allow empty commit in case there's nothing else to add
+    commit_cmd = ["git", "add", "-A"]
+    subprocess.run(commit_cmd, cwd=run_folder, check=True)
+    commit_cmd = ["git", "commit", "-m", "Initial Dockerfile commit", "--allow-empty"]
+    subprocess.run(commit_cmd, cwd=run_folder, check=True)
 
     # Merge in the LLM's new files
     prepare_codebase_merge(
@@ -229,13 +232,12 @@ async def run_locally(input: RunCodeInput) -> RunCodeOutput:
     return RunCodeOutput(output=run_process.stdout)
 
 #
-# 3) validate_output
+# validate_output
 #
 @function.defn()
 async def validate_output(input: ValidateOutputInput) -> ValidateOutputOutput:
     log.info("validate_output started", input=input)
 
-    # Build partial or full code listing depending on iteration
     files_str = build_files_str(
         dockerfile=input.dockerfile,
         files=input.files,
@@ -278,7 +280,7 @@ async def validate_output(input: ValidateOutputInput) -> ValidateOutputOutput:
     )
 
 #
-# 4) pre_flight_run
+# pre_flight_run
 #
 @dataclass
 class PreFlightOutput:
@@ -287,12 +289,6 @@ class PreFlightOutput:
 
 @function.defn()
 async def pre_flight_run() -> PreFlightOutput:
-    """
-    1. Gather user code from ./llm-output/input
-    2. If no Dockerfile among user code, create a minimal one
-    3. Merge + run in Docker
-    4. Return container output + final directory tree
-    """
     log.info("pre_flight_run started")
 
     base_output_dir = os.environ.get("LLM_OUTPUT_DIR", "/app/output")
@@ -300,7 +296,6 @@ async def pre_flight_run() -> PreFlightOutput:
     run_folder = os.path.join(base_output_dir, f"preflight_{timestamp}")
     os.makedirs(run_folder, exist_ok=True)
 
-    # 1) Collect user code
     user_json = collect_input_files()
     if not user_json["dockerfile"].strip():
         default_dockerfile = """FROM python:3.10-slim
@@ -311,22 +306,21 @@ ENTRYPOINT ["python3","main.py"]
 """
         user_json["dockerfile"] = default_dockerfile
 
-    # 2) Initialize Git + commit Dockerfile
     dockerfile_path = os.path.join(run_folder, "Dockerfile")
     with open(dockerfile_path, "w", encoding="utf-8") as df:
         df.write(user_json["dockerfile"])
 
     initialize_git_repo(run_folder)
     subprocess.run(["git", "add", "-A"], cwd=run_folder, check=True)
-    subprocess.run(["git", "commit", "-m", "pre-flight base Dockerfile"], cwd=run_folder, check=True)
+    # allow empty commit
+    subprocess.run(["git", "commit", "-m", "pre-flight base Dockerfile", "--allow-empty"], cwd=run_folder, check=True)
 
-    # 3) Merge user files
+    # Merge user files
     prepare_codebase_merge(
         repo_path=run_folder,
         llm_files=user_json["files"]
     )
 
-    # 4) Build & run
     build_cmd = ["docker", "build", "-t", "preflight_app", run_folder]
     build_process = subprocess.run(build_cmd, capture_output=True, text=True)
     if build_process.returncode != 0:

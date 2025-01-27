@@ -22,7 +22,6 @@ class AutonomousCodingWorkflow:
         log.info("AutonomousCodingWorkflow started", input=input)
 
         # 0) OPTIONAL PRE-FLIGHT STEP
-        # If user has placed files in ./llm-output/input, let's build/run them once
         input_dir = os.path.join(os.environ.get("LLM_OUTPUT_DIR", "/app/output"), "input")
         has_user_files = False
         if os.path.isdir(input_dir):
@@ -40,8 +39,7 @@ class AutonomousCodingWorkflow:
             )
             log.info("Pre-flight completed. Output:\n" + pre_flight_result.run_output)
 
-        # 1) Generate code (first iteration).
-        # If we have pre-flight info, inject it into the user's prompt
+        # 1) Generate code (first iteration)
         pre_flight_output_text = ""
         if pre_flight_result:
             pre_flight_output_text = (
@@ -83,7 +81,7 @@ class AutonomousCodingWorkflow:
                     files=files,
                     output=run_output.output,
                     test_conditions=input.test_conditions,
-                    iteration=iteration_count  # pass iteration
+                    iteration=iteration_count
                 ),
                 start_to_close_timeout=timedelta(seconds=300)
             )
@@ -96,7 +94,7 @@ class AutonomousCodingWorkflow:
                 if val_output.dockerfile:
                     dockerfile = val_output.dockerfile
 
-                # Merge changes in memory
+                # Merge changes
                 for changed_file in changed_files:
                     changed_filename = changed_file["filename"]
                     changed_content = changed_file["content"]

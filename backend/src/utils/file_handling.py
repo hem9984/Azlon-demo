@@ -1,6 +1,7 @@
 #./backend/src/utils/file_handling.py
 import os
 import re
+import json
 import subprocess
 from typing import List, Dict
 import logging
@@ -31,18 +32,24 @@ def run_tree_command(directory: str) -> str:
 def initialize_git_repo(repo_path: str) -> None:
     """
     Initializes a new Git repository in repo_path,
-    configures user name/email to allow committing.
+    using 'main' as the default branch to avoid warnings.
+    Configures user name/email to allow committing.
     """
-    subprocess.run(["git", "init"], cwd=repo_path, check=True)
+    # The key argument is --initial-branch=main
+    subprocess.run(["git", "init", "--initial-branch=main"], cwd=repo_path, check=True)
     subprocess.run(["git", "config", "user.name", "AzlonBot"], cwd=repo_path, check=True)
     subprocess.run(["git", "config", "user.email", "azlon@local"], cwd=repo_path, check=True)
 
-def commit_all_changes(repo_path: str, message: str) -> None:
+def commit_all_changes(repo_path: str, message: str, allow_empty: bool = True) -> None:
     """
     Adds all files in repo_path to staging and commits with the given message.
+    If allow_empty=True, we pass --allow-empty so it won't fail if no changes exist.
     """
     subprocess.run(["git", "add", "-A"], cwd=repo_path, check=True)
-    subprocess.run(["git", "commit", "-m", message], cwd=repo_path, check=True)
+    commit_cmd = ["git", "commit", "-m", message]
+    if allow_empty:
+        commit_cmd.append("--allow-empty")
+    subprocess.run(commit_cmd, cwd=repo_path, check=True)
 
 def auto_merge_with_llm_changes(repo_path: str) -> None:
     """
@@ -62,9 +69,11 @@ def prepare_codebase_merge(repo_path: str, llm_files: List[Dict[str, str]]) -> N
     3) Writes the new LLM files, commits them
     4) Switches back to 'main', merges with 'llm-changes' (favor LLM)
     """
-    subprocess.run(["git", "checkout", "-b", "main"], cwd=repo_path, check=True)
-    commit_all_changes(repo_path, "Base commit")
+    # We are already on 'main' from initialize_git_repo, but let's forcibly check out:
+    subprocess.run(["git", "checkout", "main"], cwd=repo_path, check=True)
+    commit_all_changes(repo_path, "Base commit", allow_empty=True)
 
+    # Create or switch to 'llm-changes' branch
     subprocess.run(["git", "checkout", "-b", "llm-changes"], cwd=repo_path, check=True)
 
     for f in llm_files:
@@ -73,7 +82,7 @@ def prepare_codebase_merge(repo_path: str, llm_files: List[Dict[str, str]]) -> N
         with open(full_path, "w", encoding="utf-8") as file_out:
             file_out.write(f["content"])
 
-    commit_all_changes(repo_path, "LLM changes")
+    commit_all_changes(repo_path, "LLM changes", allow_empty=True)
 
     subprocess.run(["git", "checkout", "main"], cwd=repo_path, check=True)
     auto_merge_with_llm_changes(repo_path)
@@ -89,6 +98,7 @@ def collect_input_files() -> Dict[str, any]:
       "dockerfile": <str or empty if none found>,
       "files": [ { "filename": "path/file", "content": "..." }, ... ]
     }
+    We skip any .git directories or their contents.
     """
     base_input_dir = os.path.join(
         os.environ.get("LLM_OUTPUT_DIR", "/app/output"), "input"
@@ -100,7 +110,15 @@ def collect_input_files() -> Dict[str, any]:
         return {"dockerfile": "", "files": []}
 
     for root, dirs, files in os.walk(base_input_dir):
+        # skip any .git directories
+        if ".git" in dirs:
+            dirs.remove(".git")
+
         for fname in files:
+            # If it's in a .git folder deeper, skip
+            if ".git" in root:
+                continue
+
             full_path = os.path.join(root, fname)
             rel_path = os.path.relpath(full_path, base_input_dir)
 
@@ -131,10 +149,10 @@ def collect_input_files() -> Dict[str, any]:
 def extract_function_signatures(content: str) -> str:
     """
     Return lines that look like function or class definitions.
-    Example: 'def my_func(...):' or 'class MyClass:'
+    E.g. 'def my_func(...):' or 'class MyClass:'
     """
-    signatures = []
     pattern = re.compile(r'^\s*(def|class)\s+\w+.*:')
+    signatures = []
     for line in content.splitlines():
         if pattern.match(line):
             signatures.append(line.strip())
@@ -144,44 +162,37 @@ def extract_function_signatures(content: str) -> str:
 
 def build_files_str(dockerfile: str, files: List[Dict[str, str]], iteration: int) -> str:
     """
-    For the 'validate_output' step, build a JSON-like string representing
-    the current Dockerfile + code, either partially or fully:
-      - For iteration < 6 => partial approach to avoid token overload
-      - For iteration >= 6 => full content of every file
-      - If file ends with .csv, .numpy, etc => only first 2 lines + ...
-      - If text file has > 50 lines in iteration < 6 => only function/class signatures
+    For 'validate_output':
+      - iteration >= 6 => full content of Dockerfile + files
+      - iteration < 6 => partial
+        * If file ext in {".csv",".numpy",".npy",".tsv"} => only first 2 lines + '...'
+        * If > 50 lines => function/class signatures only
+    Returns a JSON array string that we inject into the prompt.
     """
-    # If iteration >= 6 => we supply everything
     if iteration >= 6:
         return json.dumps(
-            [
-                {"filename": "Dockerfile", "content": dockerfile}
-            ]
-            + files,
+            [{"filename": "Dockerfile", "content": dockerfile}] + files,
             indent=2
         )
 
-    # iteration < 6 => partial
-    # We'll produce a Python list of {filename, content} but with truncated contents if large or if it's a special extension
-    truncated_list = []
-
     special_exts = {".csv", ".numpy", ".npy", ".tsv"}
+    truncated_list = []
 
     for f in files:
         ext = os.path.splitext(f["filename"])[1].lower()
-        content_lines = f["content"].splitlines()
+        lines = f["content"].splitlines()
 
-        # special extension => only first 2 lines
+        # If it's a special extension, only first 2 lines
         if ext in special_exts:
-            snippet = "\n".join(content_lines[:2]) + "\n..."
+            snippet = "\n".join(lines[:2]) + "\n..." if len(lines) >= 2 else "... (no lines found)"
             truncated_list.append({
                 "filename": f["filename"],
                 "content": snippet
             })
             continue
 
-        # normal text file => if > 50 lines, show only function signatures
-        if len(content_lines) > 50:
+        # If it's > 50 lines, only function/class signatures
+        if len(lines) > 50:
             sigs = extract_function_signatures(f["content"])
             snippet = "# (File truncated for brevity)\n" + sigs
             truncated_list.append({
@@ -189,21 +200,16 @@ def build_files_str(dockerfile: str, files: List[Dict[str, str]], iteration: int
                 "content": snippet
             })
         else:
-            # <= 50 lines => keep entire content
             truncated_list.append({
                 "filename": f["filename"],
                 "content": f["content"]
             })
 
-    # Also handle Dockerfile the same way: if iteration < 6, we can show partial or full?
-    dockerfile_lines = dockerfile.splitlines()
-    if len(dockerfile_lines) > 50:
-        # Typically Dockerfiles are short, but just in case
-        snippet = "\n".join(dockerfile_lines[:10]) + "\n# (Dockerfile truncated)"
-        docker_obj = {"filename": "Dockerfile", "content": snippet}
+    docker_lines = dockerfile.splitlines()
+    if len(docker_lines) > 50:
+        df_snippet = "\n".join(docker_lines[:10]) + "\n# (Dockerfile truncated)"
     else:
-        docker_obj = {"filename": "Dockerfile", "content": dockerfile}
+        df_snippet = dockerfile
 
-    final_list = [docker_obj] + truncated_list
-
+    final_list = [{"filename": "Dockerfile", "content": df_snippet}] + truncated_list
     return json.dumps(final_list, indent=2)
