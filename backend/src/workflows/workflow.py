@@ -7,7 +7,8 @@ import os
 with import_functions():
     from src.functions.functions import (
         generate_code, run_locally, validate_output, pre_flight_run,
-        GenerateCodeInput, RunCodeInput, ValidateOutputInput, PreFlightOutput
+        GenerateCodeInput, RunCodeInput, ValidateOutputInput, PreFlightOutput,
+        GenerateCodeOutput, FileItem
     )
 
 @dataclass
@@ -30,30 +31,23 @@ class AutonomousCodingWorkflow:
                     has_user_files = True
                     break
 
-        pre_flight_result = None
+        pre_flight_result: PreFlightOutput | None = None
         if has_user_files:
             log.info("Pre-flight: found user-provided code. Let's build/run it to see what happens.")
-            pre_flight_result: PreFlightOutput = await workflow.step(
+            pre_flight_result = await workflow.step(
                 pre_flight_run,
                 start_to_close_timeout=timedelta(seconds=300)
             )
             log.info("Pre-flight completed. Output:\n" + pre_flight_result.run_output)
 
-        # 1) Generate code (first iteration)
-        pre_flight_output_text = ""
-        if pre_flight_result:
-            pre_flight_output_text = (
-                f"\n\nWe ran the user-provided code. The container output was:\n\n"
-                f"{pre_flight_result.run_output}\n\n"
-                f"The code structure is:\n{pre_flight_result.dir_tree}\n\n"
-                "Please modify or create a Dockerfile if needed, and adjust the code to meet new test conditions.\n"
-            )
 
-        gen_output = await workflow.step(
+
+        gen_output: GenerateCodeOutput = await workflow.step(
             generate_code,
             GenerateCodeInput(
-                user_prompt=input.user_prompt + pre_flight_output_text,
-                test_conditions=input.test_conditions
+                userPrompt=input.user_prompt,
+                testConditions=input.test_conditions,
+                preflight_result=pre_flight_result
             ),
             start_to_close_timeout=timedelta(seconds=300)
         )
@@ -71,7 +65,7 @@ class AutonomousCodingWorkflow:
             run_output = await workflow.step(
                 run_locally,
                 RunCodeInput(dockerfile=dockerfile, files=files),
-                start_to_close_timeout=timedelta(seconds=300)
+                start_to_close_timeout=timedelta(seconds=3000)
             )
 
             val_output = await workflow.step(
@@ -80,6 +74,7 @@ class AutonomousCodingWorkflow:
                     dockerfile=dockerfile,
                     files=files,
                     output=run_output.output,
+                    user_prompt=input.user_prompt,
                     test_conditions=input.test_conditions,
                     iteration=iteration_count
                 ),
@@ -98,14 +93,14 @@ class AutonomousCodingWorkflow:
                 for changed_file in changed_files:
                     changed_filename = changed_file["filename"]
                     changed_content = changed_file["content"]
-                    found = False
                     for i, existing_file in enumerate(files):
-                        if existing_file["filename"] == changed_filename:
-                            files[i]["content"] = changed_content
-                            found = True
+                        if existing_file.filename == changed_filename:
+                            files[i].content = changed_content
                             break
-                    if not found:
-                        files.append({"filename": changed_filename, "content": changed_content})
+                    else:
+                        files.append(
+                            FileItem.model_validate({"filename": changed_filename, "content": changed_content})
+                        )
 
         log.warn("AutonomousCodingWorkflow reached max iterations without success")
         return False

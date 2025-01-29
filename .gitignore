@@ -128,3 +128,10 @@ celerybeat.pid
 # --------------------
 # If you were previously ignoring a lib/ directory globally, remove that line.
 # Instead, use more targeted ignores if needed.
+
+
+# --------------------  
+# BAML
+# --------------------
+# Ignore the output directory for BAML
+baml_client

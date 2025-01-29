@@ -29,5 +29,7 @@ RUN mkdir -p /app/output && chmod 777 /app/output
 # Copy application files
 COPY . /app
 
+RUN poetry run baml-cli generate
+
 # Expose application port
 EXPOSE 8000

@@ -18,6 +18,9 @@ from src.utils.file_handling import (
     collect_input_files,
     build_files_str
 )
+from src.baml_client.async_client import b
+from src.baml_client.types import GenerateCodeInput, GenerateCodeOutput, PreFlightOutput
+
 
 openai.api_key = os.environ.get("OPENAI_KEY")
 from openai import OpenAI
@@ -110,17 +113,6 @@ class ValidateOutputSchema(BaseModel):
                 }
             }
         }
-
-@dataclass
-class GenerateCodeInput:
-    user_prompt: str
-    test_conditions: str
-
-@dataclass
-class GenerateCodeOutput:
-    dockerfile: str
-    files: list
-
 @dataclass
 class RunCodeInput:
     dockerfile: str
@@ -135,6 +127,7 @@ class ValidateOutputInput:
     dockerfile: str
     files: list
     output: str
+    user_prompt: str
     test_conditions: str
     iteration: int
 
@@ -150,35 +143,8 @@ class ValidateOutputOutput:
 @function.defn()
 async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
     log.info("generate_code started", input=input)
-
-    prompt = current_generate_code_prompt.format(
-        user_prompt=input.user_prompt,
-        test_conditions=input.test_conditions
-    )
-
-    completion = client.beta.chat.completions.parse(
-        model="gpt-4o-2024-08-06",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are the initial of an autonomous coding assistant agent. Generate complete code that will run."
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        response_format=GenerateCodeSchema
-    )
-
-    result = completion.choices[0].message
-    if result.refusal:
-        raise RuntimeError("Model refused to generate code.")
-    data = result.parsed
-
-    files_list = [{"filename": f.filename, "content": f.content} for f in data.files]
-
-    return GenerateCodeOutput(dockerfile=data.dockerfile, files=files_list)
+    result = await b.GenerateCode(input, systemprompt=current_generate_code_prompt)
+    return result
 
 #
 # run_locally
@@ -191,6 +157,7 @@ async def run_locally(input: RunCodeInput) -> RunCodeOutput:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_folder = os.path.join(base_output_dir, f"llm_run_{timestamp}")
     os.makedirs(run_folder, exist_ok=True)
+    
     
     # Write Dockerfile
     dockerfile_path = os.path.join(run_folder, "Dockerfile")
@@ -245,6 +212,7 @@ async def validate_output(input: ValidateOutputInput) -> ValidateOutputOutput:
     )
 
     validation_prompt = current_validate_output_prompt.format(
+        user_prompt=input.user_prompt,
         test_conditions=input.test_conditions,
         dockerfile=input.dockerfile,
         files_str=files_str,
@@ -282,11 +250,6 @@ async def validate_output(input: ValidateOutputInput) -> ValidateOutputOutput:
 #
 # pre_flight_run
 #
-@dataclass
-class PreFlightOutput:
-    dir_tree: str
-    run_output: str
-
 @function.defn()
 async def pre_flight_run() -> PreFlightOutput:
     log.info("pre_flight_run started")

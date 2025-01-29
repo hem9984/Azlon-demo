@@ -17,6 +17,7 @@ def run_tree_command(directory: str) -> str:
     Runs the `tree` command against the given directory
     and returns its stdout as a string.
     """
+    #lets add function summaries logic and what not here
     try:
         result = subprocess.run(
             ["tree", directory],
