@@ -48,7 +48,7 @@ template_string PrintPreFlight(pre: PreFlightOutput?) #"
 "#
 
 function GenerateCode(input: GenerateCodeInput, systemprompt: string?) -> GenerateCodeOutput {
-  client CustomGPT4o
+  client Llama3
   prompt #"
     {% if systemprompt %}
     {{ systemprompt }}
@@ -59,6 +59,11 @@ function GenerateCode(input: GenerateCodeInput, systemprompt: string?) -> Genera
     - Start with a readme.md containing a summary and step-by-step plan
     - If a Dockerfile does not already exist or specific instructions are not provided, use python:3.10-slim as base Docker image
     - Install necessary dependencies in Dockerfile
+    - Run multiple commands using CMD in the Dockerfile to set up the environment if needed
+    - Output must be visible on stdout without intervention
+    - Run multiple Python files in the Dockerfile using CDM if needed
+    - Follow the commands in the readme.md or user_prompt to ensure the code runs correctly
+    - Install any drivers or libraries required for the code to run in the Dockerfile
     - Dockerfile should define ENTRYPOINT to run automatically
     - Output must be visible on stdout without intervention
     - Files should be ordered: readme.md, config files, main application files

@@ -1,5 +1,35 @@
 // Learn more about clients at https://docs.boundaryml.com/docs/snippets/clients/overview
 
+client<llm> Llama3 {
+  provider ollama
+  options {
+    model llama3
+    base_url "http://localhost:11434/v1"
+    headers {
+      allowed_role_metadata "autonomous coding agent"
+    }
+  }
+}
+
+client<llm> DeekseekR1 {
+  provider ollama
+  options {
+    model deekseek-r1
+    base_url "http://localhost:11434/v1"
+    headers {
+      allowed_role_metadata "autonomous coding agent"
+    }
+  }
+}
+
+template_string Foo() #"
+  {{ _.role('user') }}
+  This will be have foo and bar, but not cat metadata. But only for Foo, not FooWithout.
+  {{ _.role('user') }}
+  This will have none of the role metadata for Foo or FooWithout.
+"#
+
+
 client<llm> CustomGPT4o {
   provider openai
   options {

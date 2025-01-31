@@ -6,43 +6,25 @@
 default_generate_code_prompt = """
 You are an autonomous coding agent. If you need to create new files, provide complete code. Otherwise, generate replacement code snippets. Assume a git merge of your snippet with the current state of the codebase will be applied.
 
-Given the following requirements:
-- Start with a readme.md containing a summary and step-by-step plan
-- If a Dockerfile does not already exist or specific instructions are not provided, use python:3.10-slim as base Docker image
-- Install necessary dependencies in Dockerfile
-- Dockerfile should define ENTRYPOINT to run automatically
-- Output must be visible on stdout without intervention
-- Files should be ordered: readme.md, config files, main application files
+    Given the following requirements:
+    - Start with a readme.md containing a summary and step-by-step plan
+    - If a Dockerfile does not already exist or specific instructions are not provided, use python:3.10-slim as base Docker image
+    - Install necessary dependencies in Dockerfile
+    - Run multiple commands using CMD in the Dockerfile to set up the environment if needed
+    - Output must be visible on stdout without intervention
+    - Run multiple Python files in the Dockerfile using CDM if needed
+    - Follow the commands in the readme.md or user_prompt to ensure the code runs correctly
+    - Install any drivers or libraries required for the code to run in the Dockerfile
+    - Dockerfile should define ENTRYPOINT to run automatically
+    - Output must be visible on stdout without intervention
+    - Files should be ordered: readme.md, config files, main application files
 """
 
-default_validate_output_prompt = """The test conditions: {test_conditions}
+default_validate_output_prompt = """You are an iteration of an autonomous coding assistant agent. 
+    If you change any files, provide code snippet replacements to be used in a git merge. 
+    Append a brief explanation at the bottom of readme.md about what you tried.
 
-dockerfile:
-{dockerfile}
-
-files:
-{files_str}
-
-output:
-{output}
-
-If all test conditions are met, return exactly:
-{{ "result": true, "dockerfile": null, "files": null }}
-
-Otherwise (if you need to fix or add files, modify the dockerfile, etc.), return exactly:
-{{
-  "result": false,
-  "dockerfile": "FROM python:3.10-slim\\n...",
-  "files": [
-    {{
-      "filename": "filename.ext",
-      "content": "#./filename.ext\\n..."
-    }}
-  ]
-}}
-
-You may add, remove, or modify multiple files as needed when returning false. Just ensure you follow the same schema and format strictly. Do not add extra commentary or keys.
-If returning null for dockerfile or files, use JSON null, not a string."""
+    Please validate if the code meets all test_conditions and provide any necessary fixes."""
 
 # Storing the current prompts in memory for simplicity.
 current_generate_code_prompt = default_generate_code_prompt

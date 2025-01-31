@@ -1,5 +1,33 @@
 #./docker-compose.yml
 services:
+  
+  local-llm:
+    #make it work using http://localhost:11434/v1 is properly exposed outside of backend container. runs this command: docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama"
+    image: ollama/ollama
+    container_name: ollama
+    command: ["ollama", "run", "llama3"]
+    restart: always
+    networks:
+      - restack-network
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+  
+  # local-llm:
+  #   #make it work using http://localhost:11434/v1 is properly exposed outside of backend container. runs this command: docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama"
+  #   image: ollama/ollama
+  #   container_name: ollama
+  #   restart: always
+  #   command: ["ollama", "run", "deepseek-r1:70b"]
+  #   networks:
+  #     - restack-network
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama:/root/.ollama
+    
+
   restack-engine:
     image: ghcr.io/restackio/restack:main
     container_name: restack
