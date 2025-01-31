@@ -3,10 +3,9 @@ from restack_ai.function import function, log
 from dataclasses import dataclass
 import os
 import openai
-import json
 import subprocess
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 
 from pydantic import BaseModel
 
@@ -20,7 +19,7 @@ from src.utils.file_handling import (
 )
 from src.baml_client.async_client import b
 from src.baml_client.types import GenerateCodeInput, GenerateCodeOutput, PreFlightOutput
-
+from src.baml_client.types import ValidateCodeInput, ValidateCodeOutput
 
 openai.api_key = os.environ.get("OPENAI_KEY")
 from openai import OpenAI
@@ -42,77 +41,6 @@ class FileItem(BaseModel):
             "additionalProperties": False
         }
 
-class GenerateCodeSchema(BaseModel):
-    dockerfile: str
-    files: List[FileItem]
-    
-    class Config:
-        extra = "forbid"
-        schema_extra = {
-            "type": "object",
-            "properties": {
-                "dockerfile": {"type": "string"},
-                "files": {
-                    "type": "array",
-                    "items": {"$ref": "#/$defs/FileItem"}
-                }
-            },
-            "required": ["dockerfile", "files"],
-            "additionalProperties": False,
-            "$defs": {
-                "FileItem": {
-                    "type": "object",
-                    "properties": {
-                        "filename": {"type": "string"},
-                        "content": {"type": "string"}
-                    },
-                    "required": ["filename", "content"],
-                    "additionalProperties": False
-                }
-            }
-        }
-
-class ValidateOutputSchema(BaseModel):
-    result: bool
-    dockerfile: Optional[str] = None
-    files: Optional[List[FileItem]] = None
-    
-    class Config:
-        extra = "forbid"
-        schema_extra = {
-            "type": "object",
-            "properties": {
-                "result": {"type": "boolean"},
-                "dockerfile": {
-                    "anyOf": [
-                        {"type": "string"},
-                        {"type": "null"}
-                    ]
-                },
-                "files": {
-                    "anyOf": [
-                        {
-                            "type": "array",
-                            "items": {"$ref": "#/$defs/FileItem"}
-                        },
-                        {"type": "null"}
-                    ]
-                }
-            },
-            "required": ["result", "dockerfile", "files"],
-            "additionalProperties": False,
-            "$defs": {
-                "FileItem": {
-                    "type": "object",
-                    "properties": {
-                        "filename": {"type": "string"},
-                        "content": {"type": "string"}
-                    },
-                    "required": ["filename", "content"],
-                    "additionalProperties": False
-                }
-            }
-        }
 @dataclass
 class RunCodeInput:
     dockerfile: str
@@ -121,21 +49,6 @@ class RunCodeInput:
 @dataclass
 class RunCodeOutput:
     output: str
-
-@dataclass
-class ValidateOutputInput:
-    dockerfile: str
-    files: list
-    output: str
-    user_prompt: str
-    test_conditions: str
-    iteration: int
-
-@dataclass
-class ValidateOutputOutput:
-    result: bool
-    dockerfile: Optional[str] = None
-    files: Optional[list] = None
 
 #
 # generate_code
@@ -202,50 +115,10 @@ async def run_locally(input: RunCodeInput) -> RunCodeOutput:
 # validate_output
 #
 @function.defn()
-async def validate_output(input: ValidateOutputInput) -> ValidateOutputOutput:
+async def validate_output(input: ValidateCodeInput) -> ValidateCodeOutput:
     log.info("validate_output started", input=input)
-
-    files_str = build_files_str(
-        dockerfile=input.dockerfile,
-        files=input.files,
-        iteration=input.iteration
-    )
-
-    validation_prompt = current_validate_output_prompt.format(
-        user_prompt=input.user_prompt,
-        test_conditions=input.test_conditions,
-        dockerfile=input.dockerfile,
-        files_str=files_str,
-        output=input.output
-    )
-
-    completion = client.beta.chat.completions.parse(
-        model="gpt-4o-2024-08-06",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are an iteration of an autonomous coding assistant agent. If you change any files, provide complete file content replacements. Append a brief explanation at the bottom of readme.md about what you tried."
-            },
-            {
-                "role": "user",
-                "content": validation_prompt
-            }
-        ],
-        response_format=ValidateOutputSchema
-    )
-
-    result = completion.choices[0].message
-    if result.refusal:
-        return ValidateOutputOutput(result=False)
-
-    data = result.parsed
-    updated_files = [{"filename": f.filename, "content": f.content} for f in data.files] if data.files is not None else None
-
-    return ValidateOutputOutput(
-        result=data.result,
-        dockerfile=data.dockerfile,
-        files=updated_files
-    )
+    result = await b.ValidateOutput(input, systemprompt=current_validate_output_prompt)
+    return result
 
 #
 # pre_flight_run

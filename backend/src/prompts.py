@@ -1,14 +1,15 @@
 # ./backend/src/prompts.py
 
+# are these always used instead of the baml since the defaults are not none?
+#i think this is just for frontend display. real prompts are in the baml
 # Store defaults here
 default_generate_code_prompt = """
-You are an autonomous coding agent. Generate complete code that will run.
+You are an autonomous coding agent. If you need to create new files, provide complete code. Otherwise, generate replacement code snippets. Assume a git merge of your snippet with the current state of the codebase will be applied.
 
 Given the following requirements:
 - Start with a readme.md containing a summary and step-by-step plan
-- Use python:3.10-slim as base Docker image
+- If a Dockerfile does not already exist or specific instructions are not provided, use python:3.10-slim as base Docker image
 - Install necessary dependencies in Dockerfile
-- Each file should start with #./<filename>
 - Dockerfile should define ENTRYPOINT to run automatically
 - Output must be visible on stdout without intervention
 - Files should be ordered: readme.md, config files, main application files

@@ -68,7 +68,7 @@ async def run_workflow(params: UserInput):
         runId = await client.schedule_workflow(
             workflow_name="AutonomousCodingWorkflow",
             workflow_id=workflow_id,
-            input=params.dict()
+            input=params.model_dump()
         )
         result = await client.get_workflow_result(workflow_id=workflow_id, run_id=runId)
         return {"workflow_id": workflow_id, "result": result}

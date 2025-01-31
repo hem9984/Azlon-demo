@@ -1,0 +1,146 @@
+current_validate_output_prompt = """The test conditions: {test_conditions}
+
+dockerfile:
+{dockerfile}
+
+files:
+{files_str}
+
+output:
+{output}
+
+If all test conditions are met, return exactly:
+{{ "result": true, "dockerfile": null, "files": null }}
+
+Otherwise (if you need to fix or add files, modify the dockerfile, etc.), return exactly:
+{{
+  "result": false,
+  "dockerfile": "FROM python:3.10-slim\\n...",
+  "files": [
+    {{
+      "filename": "filename.ext",
+      "content": "#./filename.ext\\n..."
+    }}
+  ]
+}}
+
+You may add, remove, or modify multiple files as needed when returning false. Just ensure you follow the same schema and format strictly. Do not add extra commentary or keys.
+If returning null for dockerfile or files, use JSON null, not a string."""
+
+class FileItem(BaseModel):
+    filename: str
+    content: str
+
+    class Config:
+        extra = "forbid"
+        schema_extra = {
+            "type": "object",
+            "properties": {
+                "filename": {"type": "string"},
+                "content": {"type": "string"}
+            },
+            "required": ["filename", "content"],
+            "additionalProperties": False
+        }
+
+class ValidateOutputSchema(BaseModel):
+    result: bool
+    dockerfile: Optional[str] = None
+    files: Optional[List[FileItem]] = None
+    
+    class Config:
+        extra = "forbid"
+        schema_extra = {
+            "type": "object",
+            "properties": {
+                "result": {"type": "boolean"},
+                "dockerfile": {
+                    "anyOf": [
+                        {"type": "string"},
+                        {"type": "null"}
+                    ]
+                },
+                "files": {
+                    "anyOf": [
+                        {
+                            "type": "array",
+                            "items": {"$ref": "#/$defs/FileItem"}
+                        },
+                        {"type": "null"}
+                    ]
+                }
+            },
+            "required": ["result", "dockerfile", "files"],
+            "additionalProperties": False,
+            "$defs": {
+                "FileItem": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {"type": "string"},
+                        "content": {"type": "string"}
+                    },
+                    "required": ["filename", "content"],
+                    "additionalProperties": False
+                }
+            }
+        }
+@dataclass
+class ValidateOutputInput:
+    dockerfile: str
+    files: list
+    output: str
+    user_prompt: str
+    test_conditions: str
+    iteration: int
+
+@dataclass
+class ValidateOutputOutput:
+    result: bool
+    dockerfile: Optional[str] = None
+    files: Optional[list] = None
+
+@function.defn()
+async def validate_output(input: ValidateOutputInput) -> ValidateOutputOutput:
+    log.info("validate_output started", input=input)
+
+    files_str = build_files_str(
+        dockerfile=input.dockerfile,
+        files=input.files,
+        iteration=input.iteration
+    )
+
+    validation_prompt = current_validate_output_prompt.format(
+        user_prompt=input.user_prompt,
+        test_conditions=input.test_conditions,
+        dockerfile=input.dockerfile,
+        files_str=files_str,
+        output=input.output
+    )
+
+    completion = client.beta.chat.completions.parse(
+        model="gpt-4o-2024-08-06",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are an iteration of an autonomous coding assistant agent. If you change any files, provide complete file content replacements. Append a brief explanation at the bottom of readme.md about what you tried."
+            },
+            {
+                "role": "user",
+                "content": validation_prompt
+            }
+        ],
+        response_format=ValidateOutputSchema
+    )
+
+    result = completion.choices[0].message
+    if result.refusal:
+        return ValidateOutputOutput(result=False)
+
+    data = result.parsed
+    updated_files = [{"filename": f.filename, "content": f.content} for f in data.files] if data.files is not None else None
+
+    return ValidateOutputOutput(
+        result=data.result,
+        dockerfile=data.dockerfile,
+        files=updated_files
+    )

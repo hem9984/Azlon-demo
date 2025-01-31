@@ -7,8 +7,7 @@ import os
 with import_functions():
     from src.functions.functions import (
         generate_code, run_locally, validate_output, pre_flight_run,
-        GenerateCodeInput, RunCodeInput, ValidateOutputInput, PreFlightOutput,
-        GenerateCodeOutput, FileItem
+        GenerateCodeInput, RunCodeInput, ValidateCodeInput, PreFlightOutput, FileItem
     )
 
 @dataclass
@@ -70,12 +69,12 @@ class AutonomousCodingWorkflow:
 
             val_output = await workflow.step(
                 validate_output,
-                ValidateOutputInput(
+                ValidateCodeInput(
                     dockerfile=dockerfile,
                     files=files,
                     output=run_output.output,
-                    user_prompt=input.user_prompt,
-                    test_conditions=input.test_conditions,
+                    userPrompt=input.user_prompt,
+                    testConditions=input.test_conditions,
                     iteration=iteration_count
                 ),
                 start_to_close_timeout=timedelta(seconds=300)
@@ -102,5 +101,5 @@ class AutonomousCodingWorkflow:
                             FileItem.model_validate({"filename": changed_filename, "content": changed_content})
                         )
 
-        log.warn("AutonomousCodingWorkflow reached max iterations without success")
+        log.warning("AutonomousCodingWorkflow reached max iterations without success")
         return False
