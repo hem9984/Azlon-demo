@@ -20,6 +20,7 @@ class ValidateCodeInput {
   userPrompt string @description("The user's original coding request/instructions.")
   testConditions string @description("The conditions the code must meet (e.g. 'no errors in output').")
   iteration int @description("Zero-based or 1-based iteration count of the workflow cycle.")
+  // maybe change behavior so that if the iteration is high become more aggressive/deperate in fixing the code and maybe even lower bar so it will settle for less but at least still working
 }
 
 /// Outputs from ValidateOutput
