@@ -26,44 +26,53 @@ class AutonomousCodingWorkflow:
     @workflow.run
     async def run(self, input: WorkflowInputParams):
         """
-        Iterative workflow:
-         1) Possibly do pre_flight_run
-         2) Generate code, merge to ephemeral workspace
-         3) Repeatedly run_locally + validate_output
-         4) Copy final workspace into ./llm-output/final_<timestamp>
+        Steps:
+         1) Make a fresh ephemeral workspace
+         2) Preflight if user code exists in /input
+         3) generate_code -> merges new code
+         4) repeated run_locally + validate_output
+         5) final copy
         """
         log.info("AutonomousCodingWorkflow started", input=input)
 
-        # We'll store ephemeral code in:
         base_output = os.environ.get("LLM_OUTPUT_DIR", "/app/output")
-        base_workspace = os.path.join(base_output, "workspace")
+
+        # 1) Fresh ephemeral workspace
+        timestamp_str = time.strftime("%Y%m%d_%H%M%S")
+        base_workspace = os.path.join(base_output, f"workspace_{timestamp_str}")
+        if os.path.exists(base_workspace):
+            shutil.rmtree(base_workspace)
         os.makedirs(base_workspace, exist_ok=True)
 
-        # Step 0: Possibly do pre-flight
+        # 2) Possibly do a pre-flight step
         pfm = PreFlightManager()
         pre_flight_result = None
         if pfm.has_input_files():
-            log.info("Pre-flight: merging user-provided code from input/ & running it once.")
+            log.info("Pre-flight: merging user-provided code from /input & running once.")
             pre_flight_result = await workflow.step(
                 pre_flight_run,
                 start_to_close_timeout=timedelta(seconds=600)
             )
-            log.info("Pre-flight completed. Output:\n" + pre_flight_result.run_output)
+            log.info("Pre-flight done. Output:\n" + pre_flight_result.run_output)
 
-        # Step 1: generate initial code
+        # 3) generate_code
         gen_output: GenerateCodeOutput = await workflow.step(
             generate_code,
             GenerateCodeInput(
                 userPrompt=input.user_prompt,
                 testConditions=input.test_conditions,
-                preflight_result=pre_flight_result
+                preflight_result=pre_flight_result,
+                # dirTree=code_context["dir_tree"]  # <--- new
             ),
             start_to_close_timeout=timedelta(seconds=300)
         )
 
-        # Merge initial LLM code -> ephemeral workspace
+        # Merge initial code -> workspace
         gm = GitManager(base_workspace)
-        gm.merge_llm_changes(llm_dockerfile=gen_output.dockerfile, llm_files=gen_output.files)
+        gm.merge_llm_changes(
+            llm_dockerfile=gen_output.dockerfile,
+            llm_files=gen_output.files
+        )
 
         iteration = 0
         max_iterations = 20
@@ -73,7 +82,7 @@ class AutonomousCodingWorkflow:
             iteration += 1
             log.info(f"Iteration {iteration} start")
 
-            # run_locally => Docker build+run (with volume mount)
+            # run_locally
             run_result: RunCodeOutput = await workflow.step(
                 run_locally,
                 RunCodeInput(repo_path=base_workspace),
@@ -89,13 +98,15 @@ class AutonomousCodingWorkflow:
                 previous_output=previous_output
             )
 
+            # pass dir_tree plus everything else
             val_input = ValidateCodeInput(
                 dockerfile=code_context["dockerfile"],
                 files=code_context["files"],
                 output=previous_output,
                 userPrompt=input.user_prompt,
                 testConditions=input.test_conditions,
-                iteration=iteration
+                iteration=iteration,
+                dirTree=code_context["dir_tree"]  # <--- new
             )
 
             val_output: ValidateCodeOutput = await workflow.step(
@@ -105,30 +116,27 @@ class AutonomousCodingWorkflow:
             )
 
             if val_output.result:
-                log.info("AutonomousCodingWorkflow completed successfully")
-                # After success, copy final code to ./llm-output/final_<timestamp>
+                log.info("Workflow completed successfully.")
                 self._copy_final_workspace(base_workspace, base_output)
                 return True
             else:
-                # Merge new changes
                 gm.merge_llm_changes(
                     llm_dockerfile=val_output.dockerfile,
                     llm_files=val_output.files
                 )
 
-        log.warning("Reached max iterations without success.")
+        log.warning("Max iterations reached, no success.")
         self._copy_final_workspace(base_workspace, base_output)
         return False
 
     def _copy_final_workspace(self, workspace_path: str, base_output: str):
         """
-        Copies the ephemeral workspace into /llm-output/final_<timestamp> 
-        so the user sees the final file state, including any CSVs or subdirs 
-        generated at runtime.
+        Copy the final ephemeral workspace to a stable location 
+        so the user can see all final files, including CSVs generated at runtime.
         """
-        timestamp_str = time.strftime("%Y%m%d_%H%M%S")
-        final_dir = os.path.join(base_output, f"final_{timestamp_str}")
+        final_dir = os.path.join(base_output, f"final_{time.strftime('%Y%m%d_%H%M%S')}")
         if os.path.exists(final_dir):
             shutil.rmtree(final_dir)
         shutil.copytree(workspace_path, final_dir)
-        log.info(f"Final code state copied to: {final_dir}")
+        log.info(f"Final code state copied to {final_dir}")
+

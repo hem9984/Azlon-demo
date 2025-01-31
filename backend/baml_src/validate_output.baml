@@ -14,6 +14,7 @@
 
 /// Inputs for ValidateOutput
 class ValidateCodeInput {
+  dirTree string? @description("Directory structure included for context.")
   dockerfile string @description("The Dockerfile from the current code state or newly generated snippet.")
   files FileItem[] @description("All code files from the current iteration of the codebase.")
   output string @description("The container's stdout or stderr from the last run.")
@@ -60,6 +61,9 @@ function ValidateOutput(input: ValidateCodeInput, systemprompt: string?) -> Vali
 
     The initial user request:
     {{ input.userPrompt }}
+
+    Directory Tree:
+    {{ input.dirTree }}
 
     Dockerfile:
     {{ input.dockerfile }}

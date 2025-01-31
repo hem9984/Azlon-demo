@@ -15,7 +15,8 @@ class GenerateCodeInput {
   /// The user's coding request
   userPrompt string
   /// The result of the preflight check
-  preflight_result PreFlightOutput? 
+  dirTree string? @description("Directory structure included for context.") 
+  preflight_result PreFlightOutput?
   /// Test conditions the code must meet
   testConditions string
 }
@@ -76,7 +77,10 @@ function GenerateCode(input: GenerateCodeInput, systemprompt: string?) -> Genera
 
     Test Conditions:
     {{ input.testConditions }}
-
+    Here is the current state of the codebase you will apply your changes to:
+    Directory Tree: 
+    {{ input.dirTree }}
+    Code files:
     {{ PrintPreFlight(input.preflight_result) }}
   "#
 }
