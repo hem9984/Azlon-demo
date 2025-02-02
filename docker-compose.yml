@@ -1,27 +1,33 @@
 #./docker-compose.yml
 services:
+  # Ollama commands like pulling models and serving is all done in clients.baml in the backend
   local-llm:
-    #make it work using http://localhost:11434/v1 is properly exposed outside of backend container. runs this command: docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama"
     image: ollama/ollama
-    #container_name: ollama
-    command: ["sh", "-c", "ollama pull llama3 && ollama serve"]
-    restart: always
+    restart: unless-stopped
     networks:
       - restack-network
     ports:
-      - "11434:11434"
+      - "11435:11434"
     volumes:
       - ollama:/root/.ollama
   
   # local-llm:
-  #   #make it work using http://localhost:11434/v1 is properly exposed outside of backend container. runs this command: docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama"
-  #   image: ollama/ollama
-  #   restart: always
-  #   command: ["sh", "-c", "ollama pull deepseek-r1:70b && ollama serve"]
+      # For AMD GPUs:
+  #   image: ollama/ollama:rocm
+      # For NVIDIA GPUs:
+  #   image: ollama/ollama:latest
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11435:11434"
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             capabilities: ["gpu"]
+  #             count: all
   #   networks:
   #     - restack-network
-  #   ports:
-  #     - "11434:11434"
   #   volumes:
   #     - ollama:/root/.ollama
     
@@ -29,7 +35,7 @@ services:
   restack-engine:
     image: ghcr.io/restackio/restack:main
     container_name: restack
-    restart: always
+    restart: unless-stopped
     networks:
       - restack-network
     ports:
@@ -106,4 +112,4 @@ networks:
 volumes:
   ollama:
     # If you want it external, set external: true, but usually you do:
-    external: false
+    external: true

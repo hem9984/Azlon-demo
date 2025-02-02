@@ -26,7 +26,7 @@ class ValidateCodeInput {
 
 /// Outputs from ValidateOutput
 class ValidateCodeOutput {
-  result bool @description("Whether the code meets all test conditions.")
+  result bool @description("Whether the code meets all test conditions. If result is true, don't return any changes. If false, return updated code snippets or Dockerfile.")
   dockerfile string? @description(#"
     A new or updated Dockerfile if changes are necessary. 
     Use triplequote strings if needed for clarity.

@@ -4,7 +4,7 @@ client<llm> Llama3 {
   provider ollama
   options {
     model llama3
-    base_url "http://localhost:11434/v1"
+    base_url "http://local-llm:11434/v1"
     headers {
       allowed_role_metadata "autonomous coding agent"
     }
@@ -15,7 +15,7 @@ client<llm> DeekseekR1 {
   provider ollama
   options {
     model deekseek-r1
-    base_url "http://localhost:11434/v1"
+    base_url "http://local-llm:11434/v1"
     headers {
       allowed_role_metadata "autonomous coding agent"
     }
