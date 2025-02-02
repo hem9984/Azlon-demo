@@ -49,7 +49,7 @@ template_string PrintPreFlight(pre: PreFlightOutput?) #"
 "#
 
 function GenerateCode(input: GenerateCodeInput, systemprompt: string?) -> GenerateCodeOutput {
-  client Llama3
+  client DeepseekR1_8b
   prompt #"
     {% if systemprompt %}
     {{ systemprompt }}
