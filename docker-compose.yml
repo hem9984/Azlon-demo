@@ -9,7 +9,10 @@ services:
     ports:
       - "11435:11434"
     volumes:
-      - ollama:/root/.ollama
+      - /usr/share/ollama/.ollama:/root/.ollama:rw
+      #above only works on linux. need more comprehensive solution.
+      # - ollama:/root/.ollama
+      # hard to make it use local models user has. macOS: ~/.ollama/models Linux: /usr/share/ollama/.ollama/models
   
   # local-llm:
       # For AMD GPUs:
@@ -109,7 +112,7 @@ networks:
   restack-network:
     driver: bridge
 
-volumes:
-  ollama:
-    # If you want it external, set external: true, but usually you do:
-    external: true
+# volumes:
+#   ollama:
+#     # If you want it external, set external: true, but usually you do:
+#     external: true
