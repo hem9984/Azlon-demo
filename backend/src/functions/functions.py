@@ -31,10 +31,10 @@ async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
 @function.defn()
 async def run_locally(input: RunCodeInput) -> RunCodeOutput:
     """
-    Build & run Docker with a volume mount so if the container 
-    writes data.csv or other files, they appear in the ephemeral workspace.
+    Docker build & run from ephemeral workspace. 
+    We mount the workspace so any new files show up on host.
     """
-    log.info(f"run_locally => building Docker in {input.repo_path}")
+    log.info(f"run_locally => building in {input.repo_path}")
     build_cmd = ["docker", "build", "-t", "myapp", input.repo_path]
     proc_build = subprocess.run(build_cmd, capture_output=True, text=True)
     if proc_build.returncode != 0:
@@ -60,9 +60,9 @@ async def validate_output(input: ValidateCodeInput) -> ValidateCodeOutput:
 @function.defn()
 async def pre_flight_run() -> PreFlightOutput:
     """
-    Merge user code from /input, build & run Docker once, volume mounting as well
+    Merges user code from /input into ephemeral folder, runs Docker once.
     """
-    log.info("pre_flight_run => merging user code + running once")
+    log.info("pre_flight_run => merging user code + building container")
     from src.utils.file_handling import PreFlightManager
     pfm = PreFlightManager()
     return pfm.perform_preflight_merge_and_run()
