@@ -41,7 +41,7 @@ class ValidateCodeOutput {
 /// to check if the code meets test conditions and possibly 
 /// return updated file snippets or Dockerfile changes
 function ValidateOutput(input: ValidateCodeInput, systemprompt: string?) -> ValidateCodeOutput {
-  client DeepseekR1_8b
+  client CustomGPT4o
   //client CustomGPT4o
   prompt #"
     {% if systemprompt %}
