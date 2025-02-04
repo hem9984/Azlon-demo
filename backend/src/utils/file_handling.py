@@ -102,7 +102,8 @@ class GitManager:
 
 def run_tree_command(directory: str) -> str:
     try:
-        result = subprocess.run(["tree", directory], capture_output=True, text=True, check=True)
+        # Using the '-J' flag to print out a JSON representation of the tree.
+        result = subprocess.run(["tree", "-J", directory], capture_output=True, text=True, check=True)
         return result.stdout
     except Exception as e:
         logger.warning(f"Failed to run 'tree' in {directory}: {e}")
