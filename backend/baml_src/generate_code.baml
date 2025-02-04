@@ -49,7 +49,7 @@ template_string PrintPreFlight(pre: PreFlightOutput?) #"
 "#
 
 function GenerateCode(input: GenerateCodeInput, systemprompt: string?) -> GenerateCodeOutput {
-  client DeepseekR1_8b
+  client CustomGPT4o
   prompt #"
     {% if systemprompt %}
     {{ systemprompt }}

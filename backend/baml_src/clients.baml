@@ -11,6 +11,17 @@ client<llm> Llama3 {
   }
 }
 
+client<llm> Qwen2_5 {
+  provider ollama
+  options {
+    model qwen2.5
+    base_url "http://local-llm:11434/v1"
+    headers {
+      allowed_role_metadata "autonomous coding agent"
+    }
+  }
+}
+
 client<llm> DeepseekR1_8b {
   provider ollama
   options {
