@@ -79,23 +79,23 @@ function ValidateOutput(input: ValidateCodeInput, systemprompt: string?) -> Vali
   "#
 }
 
-// test ValidateSimpleScript {
-//   functions [ValidateOutput]
-//   args {
-//     input {
-//       dockerfile "FROM python:3.10-slim"
-//       files [
-//         {
-//           filename "main.py"
-//           content '''
-// print("Hello World")
-// '''
-//         }
-//       ]
-//       output "Hello World"
-//       userPrompt "Create a hello world script"
-//       testConditions "Should print Hello World"
-//       iteration 1
-//     }
-//   }
-// }
+test ValidateSimpleScript {
+  functions [ValidateOutput]
+  args {
+    input {
+      dockerfile "FROM python:3.10-slim"
+      files [
+        {
+          filename "main.py"
+          content #"
+          print('Hello World')
+          "#
+        }
+      ]
+      output "Hello World"
+      userPrompt "Create a hello world script"
+      testConditions "Should print Hello World"
+      iteration 1
+    }
+  }
+}

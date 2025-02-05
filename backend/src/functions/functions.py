@@ -1,5 +1,5 @@
 #./backend/src/functions/functions.py
-from restack_ai.function import function, log
+from restack_ai.function import function, log # type: ignore
 from dataclasses import dataclass
 import os
 import subprocess

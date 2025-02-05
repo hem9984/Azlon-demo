@@ -1,5 +1,5 @@
 #./backend/src/workflows/workflow.py
-from restack_ai.workflow import workflow, import_functions, log
+from restack_ai.workflow import workflow, import_functions, log # type: ignore
 from dataclasses import dataclass
 from datetime import timedelta
 import os
