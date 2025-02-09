@@ -1,7 +1,7 @@
 #./backend/src/client.py
 import os 
-from restack_ai import Restack
-from restack_ai.restack import CloudConnectionOptions
+from restack_ai import Restack # type: ignore
+from restack_ai.restack import CloudConnectionOptions # type: ignore
 
 RESTACK_TEMPORAL_ADDRESS = os.getenv('RESTACK_TEMPORAL_ADDRESS')
 RESTACK_ENGINE_ADDRESS = os.getenv('RESTACK_ENGINE_ADDRESS')
