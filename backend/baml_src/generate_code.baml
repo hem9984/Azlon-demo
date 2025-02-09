@@ -114,3 +114,27 @@ test tacos {
     }
   }
 }
+
+test GenerateSimpleScriptWithPreflight {
+  functions [GenerateCode]
+  args {
+    input {
+      userPrompt "Create a hello world script"
+      testConditions "Script should print 'Hello, World!' to stdout"
+      preflight_result {
+        dir_tree "main.py"
+        run_output "Hello, World!"
+      }
+    }
+  }
+}
+
+test Linearregression {
+  functions [GenerateCode]
+  args {
+    input {
+      userPrompt "write a python script that performs linear regression on a csv file. create another file that generates the synthetic csv file to use on the first script"
+      testConditions "no errors in output"
+    }
+  }
+}

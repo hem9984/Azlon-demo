@@ -6,8 +6,8 @@ import subprocess
 from datetime import datetime
 from typing import List
 
-from src.baml_client.async_client import b
-from src.baml_client.types import (
+from src.baml_client.async_client import b # type: ignore
+from src.baml_client.types import ( # type: ignore
     GenerateCodeInput, GenerateCodeOutput,
     ValidateCodeInput, ValidateCodeOutput,
     PreFlightOutput

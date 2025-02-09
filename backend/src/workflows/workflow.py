@@ -9,8 +9,8 @@ import time
 with import_functions():
     from src.functions.functions import (
         generate_code, run_locally, validate_output, pre_flight_run,
-        GenerateCodeInput, GenerateCodeOutput, RunCodeInput, RunCodeOutput,
-        ValidateCodeInput, ValidateCodeOutput, PreFlightOutput
+        GenerateCodeInput, GenerateCodeOutput, RunCodeInput, RunCodeOutput, # type: ignore
+        ValidateCodeInput, ValidateCodeOutput, PreFlightOutput # type: ignore
     )
     from src.utils.file_handling import (
         PreFlightManager, GitManager, CodeInclusionManager
