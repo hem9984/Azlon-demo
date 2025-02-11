@@ -1,5 +1,16 @@
 // Learn more about clients at https://docs.boundaryml.com/docs/snippets/clients/overview
 
+client<llm> DeepseekR1_14b {
+  provider ollama
+  options {
+    model deepseek-r1:14b
+    base_url "http://local-llm:11434/v1"
+    headers {
+      allowed_role_metadata "autonomous coding agent"
+    }
+  }
+}
+
 client<llm> Llama3 {
   provider ollama
   options {

@@ -13,11 +13,10 @@ packages = [{include = "src"}]
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
 restack-ai = "0.0.50"
-openai = "1.57.1"
 pydantic = "^2.10.3"
 fastapi = "0.115.4"  
 uvicorn = "^0.22.0"
-baml-py = "^0.74.0"
+baml-py = "0.75.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "6.2"  # Optional: Add if you want to include tests in your example

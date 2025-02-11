@@ -1,38 +1,38 @@
 #./docker-compose.yml
 services:
   # Ollama commands like pulling models and serving is all done in clients.baml in the backend
-  local-llm:
-    image: ollama/ollama
-    restart: unless-stopped
-    networks:
-      - restack-network
-    ports:
-      - "11435:11434"
-    volumes:
-      - /usr/share/ollama/.ollama:/root/.ollama:rw
+  # local-llm:
+  #   image: ollama/ollama
+  #   restart: unless-stopped
+  #   networks:
+  #     - restack-network
+  #   ports:
+  #     - "11435:11434"
+  #   volumes:
+  #     - /usr/share/ollama/.ollama:/root/.ollama:rw
       #above only works on linux. need more comprehensive solution.
       # - ollama:/root/.ollama
       # hard to make it use local models user has. macOS: ~/.ollama/models Linux: /usr/share/ollama/.ollama/models
   
-  # local-llm:
-      # For AMD GPUs:
-  #   image: ollama/ollama:rocm
-      # For NVIDIA GPUs:
-  #   image: ollama/ollama:latest
-  #   restart: unless-stopped
-  #   ports:
-  #     - "11435:11434"
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             capabilities: ["gpu"]
-  #             count: all
-  #   networks:
-  #     - restack-network
-  #   volumes:
-  #     - ollama:/root/.ollama
+  local-llm:
+    #  For AMD GPUs:
+    #image: ollama/ollama:rocm
+    #  For NVIDIA GPUs:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11435:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: ["gpu"]
+              count: all
+    networks:
+      - restack-network
+    volumes:
+      - /usr/share/ollama/.ollama:/root/.ollama:rw
     
 
   restack-engine:
@@ -54,6 +54,7 @@ services:
       DOCKER_TLS_CERTDIR: ""
     networks:
       - restack-network
+    restart: unless-stopped
     volumes:
       - ./llm-output:/app/output:rw
 
