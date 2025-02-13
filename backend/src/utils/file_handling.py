@@ -1,7 +1,8 @@
-#./backend/src/utils/file_handling.py
+# ./backend/src/utils/file_handling.py
 import os
 import re
 import json
+import csv
 import subprocess
 import time
 import shutil
@@ -51,16 +52,17 @@ class GitManager:
 
     def merge_llm_changes(self, llm_dockerfile: Optional[str], llm_files: Optional[List[Any]]):
         """
-        If llm_files is a list of dict or BAML FileItem, convert to dict:
-         { filename, content } -> physically write them.
+        If llm_dockerfile is provided, we treat it as Dockerfile content.
+        If llm_files is a list of {filename, content} or typed FileItem, we write them.
+        Then commit on branch 'llm-changes' and merge with 'main'.
         """
         from src.baml_client.types import FileItem
         changes: List[FileItem] = []
 
-        if llm_dockerfile is not None:
+        if llm_dockerfile and llm_dockerfile.strip():
             changes.append(FileItem(filename="Dockerfile", content=llm_dockerfile))
 
-        if llm_files is not None:
+        if llm_files:
             for f in llm_files:
                 if isinstance(f, dict):
                     changes.append(FileItem(filename=f["filename"], content=f["content"]))
@@ -70,14 +72,11 @@ class GitManager:
         if not changes:
             return
 
-        # 1) commit existing code on main
         subprocess.run(["git", "checkout", "main"], cwd=self.repo_path, check=True)
         self._commit_all("Base commit", allow_empty=True)
 
-        # 2) create/reset llm-changes
         subprocess.run(["git", "checkout", "-B", "llm-changes"], cwd=self.repo_path, check=True)
 
-        # 3) write them physically
         for item in changes:
             path = os.path.join(self.repo_path, item.filename)
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -86,7 +85,6 @@ class GitManager:
 
         self._commit_all("LLM changes", allow_empty=True)
 
-        # 4) merge them back to main
         subprocess.run(["git", "checkout", "main"], cwd=self.repo_path, check=True)
         self._auto_merge_theirs()
 
@@ -104,9 +102,8 @@ def run_tree_command(directory: str) -> str:
 
 class CodeInclusionManager:
     """
-    Decides what gets included in the 'files' array for the LLM context. 
-    We do partial reading/truncation for big files, but physically the entire file 
-    is already in the ephemeral workspace from GitManager.
+    Decides what files to include in ValidateCodeInput.files.
+    We do partial reading/truncation for large files, and special summarization for CSV.
     """
     special_exts = {".csv", ".numpy", ".npy", ".tsv"}
 
@@ -118,11 +115,10 @@ class CodeInclusionManager:
         tree_str = self._build_directory_tree()
         dockerfile_content = self._read_dockerfile()
         code_files = self._gather_files()
-
         return {
+            "dirTree": tree_str,
             "dockerfile": dockerfile_content,
-            "files": code_files,
-            "dir_tree": tree_str
+            "files": code_files
         }
 
     def _build_directory_tree(self) -> str:
@@ -139,13 +135,12 @@ class CodeInclusionManager:
         return ""
 
     def _approx_token_count(self, text: str) -> int:
-        # simplistic measure: # of whitespace tokens
         return len(text.split())
 
     def _gather_files(self) -> List[Dict[str, str]]:
         """
-        We walk the ephemeral workspace, read each file (except .git, license, Dockerfile)
-        in partial if needed, returning a {filename, content} list for the LLM context.
+        Walk ephemeral workspace, reading each file (except .git, license, Dockerfile).
+        Possibly truncates large files, or summarizes CSV, returning {filename, content}.
         """
         final_list = []
         for root, dirs, files in os.walk(self.repo_path):
@@ -154,7 +149,6 @@ class CodeInclusionManager:
             for fname in files:
                 fname_lower = fname.lower()
                 if fname_lower in ("dockerfile", "license"):
-                    # skip them in the LLM context if you want
                     continue
                 full_path = os.path.join(root, fname)
                 rel_path = os.path.relpath(full_path, self.repo_path)
@@ -164,25 +158,77 @@ class CodeInclusionManager:
                     final_list.append({"filename": rel_path, "content": content})
         return final_list
 
+    def _truncate_if_needed(self, text: str, max_len: int = 100) -> str:
+        """If text is longer than max_len, cut it and append '... (truncated)'."""
+        if len(text) > max_len:
+            return text[:max_len] + "... (truncated)"
+        return text
+
+    def _summarize_csv(self, full_path: str, max_lines: int = 2) -> str:
+        """
+        Summarize a CSV by reading its headers, sampling up to 2 rows,
+        and truncating any field > 100 chars.
+        Returns a JSON string with { column_names, sample_rows, summary }.
+        """
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                reader = csv.DictReader(f)
+                if not reader.fieldnames:
+                    return json.dumps({
+                        "column_names": [],
+                        "sample_rows": [],
+                        "summary": "CSV has no header row or is empty."
+                    }, indent=2)
+
+                columns = reader.fieldnames
+                sample_rows = []
+                for i, row in enumerate(reader):
+                    if i >= max_lines:
+                        break
+                    truncated_row = {}
+                    for col in columns:
+                        val = row[col] if col in row else ""
+                        truncated_row[col] = self._truncate_if_needed(val, 100)
+                    sample_rows.append(truncated_row)
+
+                summary_text = f"Total columns: {len(columns)}. Sampled up to {max_lines} row(s)."
+                data = {
+                    "column_names": columns,
+                    "sample_rows": sample_rows,
+                    "summary": summary_text
+                }
+                return json.dumps(data, indent=2)
+        except Exception as e:
+            return f"Error reading CSV: {e}"
+
     def _read_file_with_rules(self, fname_lower: str, full_path: str) -> Optional[str]:
+        ext = os.path.splitext(fname_lower)[1]
+
+        # Check for CSV => Summarize
+        if ext == ".csv":
+            summary = self._summarize_csv(full_path)
+            self.token_count += self._approx_token_count(summary)
+            return summary
+
+        # Otherwise try reading raw text
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 raw_text = f.read()
         except:
             return None
 
-        ext = os.path.splitext(fname_lower)[1]
-        # main.py or app.py => entire
+        # apply standard rules
         if fname_lower in ("main.py", "app.py"):
+            # read entire
             self.token_count += self._approx_token_count(raw_text)
             return raw_text
 
-        # .py containing "test"
+        # *.py with "test" in name => entire
         if ext == ".py" and "test" in fname_lower:
             self.token_count += self._approx_token_count(raw_text)
             return raw_text
 
-        # readme => entire or truncated
+        # readme.md => entire or truncated
         if fname_lower == "readme.md":
             if len(raw_text) > 10000:
                 snippet = raw_text[:10000] + "\n... (truncated bottom of readme)"
@@ -192,14 +238,15 @@ class CodeInclusionManager:
                 self.token_count += self._approx_token_count(raw_text)
                 return raw_text
 
-        # special_ext => only first 2 lines
+        # other special ext => only first 2 lines
         if ext in self.special_exts:
+            # .csv is already handled, but for .npy, .tsv, etc.:
             lines = raw_text.splitlines()
             snippet = "\n".join(lines[:2]) + "\n... (truncated special ext)"
             self.token_count += self._approx_token_count(snippet)
             return snippet
 
-        # other .py => entire unless we exceed 60000 => then only def/class/return lines
+        # .py => entire unless token_count>60000 => then only def/class/return lines
         if ext == ".py":
             if self.token_count < 60000:
                 self.token_count += self._approx_token_count(raw_text)
@@ -240,10 +287,10 @@ class PreFlightManager:
 
     def perform_preflight_merge_and_run(self) -> "PreFlightOutput":
         """
-        Creates ephemeral folder, merges all user code from /input, 
-        builds & runs Docker once. Returns PreFlightOutput (dir_tree, run_output).
+        Create ephemeral folder, merges user code from /input.
+        If there's a Dockerfile, build & run once. Otherwise skip building.
+        Returns PreFlightOutput with dirTree & runOutput describing success/failure.
         """
-        from src.baml_client.types import PreFlightOutput
         base_output = os.environ.get("LLM_OUTPUT_DIR", "/app/output")
         stamp = time.strftime("%Y%m%d_%H%M%S")
         run_folder = os.path.join(base_output, f"preflight_{stamp}")
@@ -252,50 +299,56 @@ class PreFlightManager:
         os.makedirs(run_folder, exist_ok=True)
 
         user_json = self._collect_input_files()
-        if not user_json["dockerfile"].strip():
-            # fallback Dockerfile if none
-            user_json["dockerfile"] = """FROM python:3.10-slim
-WORKDIR /app
-COPY . .
-RUN apt-get update && apt-get install -y python3 python3-pip
-ENTRYPOINT ["python3","main.py"]
-"""
-
+        from src.baml_client.types import PreFlightOutput
         from .file_handling import GitManager, run_tree_command
+
         gm = GitManager(run_folder)
         gm.merge_llm_changes(
-            llm_dockerfile=user_json["dockerfile"],
+            llm_dockerfile=user_json["dockerfile"].strip() or None,
             llm_files=user_json["files"]
         )
 
-        # Docker build
-        build_cmd = ["docker", "build", "-t", "preflight_app", run_folder]
-        build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
         tree_str = run_tree_command(run_folder)
-        if build_proc.returncode != 0:
+
+        # If no Dockerfile, skip building
+        if not user_json["dockerfile"].strip():
             return PreFlightOutput(
-                dir_tree=tree_str, run_output=(build_proc.stderr or build_proc.stdout)
+                dirTree=tree_str,
+                runOutput="No Dockerfile found. Preflight was skipped."
             )
 
-        # Docker run => mount volume so new files also appear in run_folder
-        run_cmd = [
-            "docker", "run", "--rm",
-            "-v", f"{run_folder}:/app",
-            "preflight_app"
-        ]
-        run_proc = subprocess.run(run_cmd, capture_output=True, text=True)
-        tree_str = run_tree_command(run_folder)
-        if run_proc.returncode != 0:
-            return PreFlightOutput(
-                dir_tree=tree_str, run_output=(run_proc.stderr or run_proc.stdout)
-            )
+        # Attempt Docker build & run
+        try:
+            build_cmd = ["docker", "build", "-t", "preflight_app", run_folder]
+            build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
 
-        return PreFlightOutput(dir_tree=tree_str, run_output=run_proc.stdout)
+            if build_proc.returncode != 0:
+                return PreFlightOutput(
+                    dirTree=tree_str,
+                    runOutput=(build_proc.stderr or build_proc.stdout)
+                )
+
+            run_cmd = [
+                "docker", "run", "--rm",
+                "-v", f"{run_folder}:/app",
+                "preflight_app"
+            ]
+            run_proc = subprocess.run(run_cmd, capture_output=True, text=True)
+            return PreFlightOutput(
+                dirTree=run_tree_command(run_folder),
+                runOutput=(run_proc.stderr or run_proc.stdout)
+                if run_proc.returncode != 0 else run_proc.stdout
+            )
+        except Exception as e:
+            return PreFlightOutput(
+                dirTree=tree_str,
+                runOutput=f"Preflight exception: {e}"
+            )
 
     def _collect_input_files(self) -> Dict[str, Any]:
         """
-        Gathers all subdirs/files from /input (except .git).
-        Returns { "dockerfile": <str>, "files": [ { filename, content }, ... ] }
+        Gather all subdirs/files from /input (except .git). The first Dockerfile becomes user_json["dockerfile"].
+        Everything else goes into user_json["files"].
         """
         input_dir = os.path.join(os.environ.get("LLM_OUTPUT_DIR", "/app/output"), "input")
         dockerfile_contents = ""
@@ -312,10 +365,6 @@ ENTRYPOINT ["python3","main.py"]
                 full_path = os.path.join(root, fname)
                 rel_path = os.path.relpath(full_path, input_dir)
 
-                # optional: skip LICENSE if you don't want it
-                if fname.lower() == "license":
-                    continue
-
                 try:
                     with open(full_path, "r", encoding="utf-8") as ff:
                         content = ff.read()
@@ -323,7 +372,6 @@ ENTRYPOINT ["python3","main.py"]
                     content = ""
 
                 if fname.lower() == "dockerfile" and not dockerfile_contents:
-                    # if user has multiple Dockerfiles, we keep the first 
                     dockerfile_contents = content
                 else:
                     collected.append({"filename": rel_path, "content": content})

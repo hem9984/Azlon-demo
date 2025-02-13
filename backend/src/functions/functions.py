@@ -1,13 +1,13 @@
-#./backend/src/functions/functions.py
-from restack_ai.function import function, log # type: ignore
+# ./backend/src/functions/functions.py
+from restack_ai.function import function, log  # type: ignore
 from dataclasses import dataclass
 import os
 import subprocess
 from datetime import datetime
 from typing import List
 
-from src.baml_client.async_client import b # type: ignore
-from src.baml_client.types import ( # type: ignore
+from src.baml_client.async_client import b 
+from src.baml_client.types import ( 
     GenerateCodeInput, GenerateCodeOutput,
     ValidateCodeInput, ValidateCodeOutput,
     PreFlightOutput
@@ -24,6 +24,10 @@ class RunCodeOutput:
 
 @function.defn()
 async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
+    """
+    Call the BAML-based GenerateCode function with system prompt
+    to produce a Dockerfile and code files.
+    """
     log.info(f"generate_code started => {input}")
     result = await b.GenerateCode(input, systemprompt=current_generate_code_prompt)
     return result
@@ -32,7 +36,7 @@ async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
 async def run_locally(input: RunCodeInput) -> RunCodeOutput:
     """
     Docker build & run from ephemeral workspace. 
-    We mount the workspace so any new files show up on host.
+    Return logs if build/run fails.
     """
     log.info(f"run_locally => building in {input.repo_path}")
     build_cmd = ["docker", "build", "-t", "myapp", input.repo_path]
@@ -53,6 +57,9 @@ async def run_locally(input: RunCodeInput) -> RunCodeOutput:
 
 @function.defn()
 async def validate_output(input: ValidateCodeInput) -> ValidateCodeOutput:
+    """
+    Call the BAML-based ValidateOutput function with system prompt.
+    """
     log.info(f"validate_output => iteration {input.iteration}")
     result = await b.ValidateOutput(input, systemprompt=current_validate_output_prompt)
     return result
@@ -60,9 +67,10 @@ async def validate_output(input: ValidateCodeInput) -> ValidateCodeOutput:
 @function.defn()
 async def pre_flight_run() -> PreFlightOutput:
     """
-    Merges user code from /input into ephemeral folder, runs Docker once.
+    Merge user code from /input, if a Dockerfile is found then build & run once.
+    Otherwise skip building.
     """
-    log.info("pre_flight_run => merging user code + building container")
+    log.info("pre_flight_run => merging user code + building container if Dockerfile is found.")
     from src.utils.file_handling import PreFlightManager
     pfm = PreFlightManager()
     return pfm.perform_preflight_merge_and_run()

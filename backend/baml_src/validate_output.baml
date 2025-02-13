@@ -1,18 +1,26 @@
 // ./backend/baml_src/validate_output.baml
 
-/// A file item representing a single code file to merge
-// class FileItem {
-//   filename string @description("Relative path/filename for the code file")
-//   content string @description(#"
-//     The code or text content of this file.
-//     Use triplequote strings to prevent escape characters
-//     '''
-//     [Code snippet]
-//     '''
-//   "#)
-// }
+//sometimes includes csv file as suspected file which can cause token overload
+//since temperature is low, it is not very creative and often oscillates back and forth between a couple errors
+// rarely adds more files in later iterations. the first iteration usually determines the files, and all subsequent iterations just work with those files
 
-/// Inputs for ValidateOutput
+// experiment with giving validate output high temp, and generate code low temp
+
+// prompt: in your description, tell it to create new files if needed or change its approach. be detailed and thorough in your inscructions for creating the code
+
+class DirectlySuspectedFile {
+  filename string @description("Relative path/filename for the code file")
+  @@dynamic // This is a dynamic field that can be used to provide full content of the file
+}
+
+class UnsuspectedFile {
+  filename string @description("Relative path/filename for the code file")
+  content string @description(#"
+    Summary of the file's contents to give context to the LLM.
+    Provide only as much detail as needed for generate_code to understand.
+  "#)
+}
+
 class ValidateCodeInput {
   dirTree string? @description("Directory structure included for context.")
   dockerfile string @description("The Dockerfile from the current code state or newly generated snippet.")
@@ -21,37 +29,35 @@ class ValidateCodeInput {
   userPrompt string @description("The user's original coding request/instructions.")
   testConditions string @description("The conditions the code must meet (e.g. 'no errors in output').")
   iteration int @description("Zero-based or 1-based iteration count of the workflow cycle.")
-  // maybe change behavior so that if the iteration is high become more aggressive/deperate in fixing the code and maybe even lower bar so it will settle for less but at least still working
 }
 
-/// Outputs from ValidateOutput
 class ValidateCodeOutput {
-  result bool @description("Whether the code meets all test conditions. If result is true, don't return any changes. If false, return updated code snippets or Dockerfile.")
-  dockerfile string? @description(#"
-    A new or updated Dockerfile if changes are necessary. 
-    Use triplequote strings if needed for clarity.
-    '''
-    [Code]
-    '''
+  result bool @description(#"
+    Whether the code meets all test conditions and there is absolutely no error in the output. 
+    If result is true, return null (or empty arrays) for the other fields.
+    If false, fill in the rest of the fields.
   "#)
-  files FileItem[]? @description("A list of new or updated code files if changes are required. Use triplequote strings for code content.")
+  
+  reason string? @description("If result is false, the reason or suspected cause for the failure, plus any insights on how to fix it.")
+  suspectedFiles DirectlySuspectedFile[] @description(#"
+  Files to be included in their entirety for the next iteration of generate_code.
+  "#)
+  unsuspectedFiles UnsuspectedFile[] @description("Files not suspected to have caused the error; only a summary of their content is needed.")
 }
 
-/// The ValidateOutput function calls your GPT-like model 
-/// to check if the code meets test conditions and possibly 
-/// return updated file snippets or Dockerfile changes
 function ValidateOutput(input: ValidateCodeInput, systemprompt: string?) -> ValidateCodeOutput {
-  client CustomGPT4o
-  //client CustomGPT4o
+  client Gpt4o_3temp
   prompt #"
     {% if systemprompt %}
     {{ systemprompt }}
     {% else %}
     You are an iteration of an autonomous coding assistant agent. 
-    If you change any files, provide code snippet replacements to be used in a git merge. 
-    Append a brief explanation at the bottom of readme.md about what you tried.
-
-    Please validate if the code meets all test conditions and provide any necessary fixes.
+    - Your job is to determine if the code meets the user's test conditions.
+    - If it does, set result to true and leave the other fields empty or null.
+    - If not, explain the reason for failure. Be very detailed and specific on how to fix it. 
+    - Select which files are likely the cause.
+    - Provide short summaries for files that are *not* suspected to be the cause, 
+      so they can still be used as context in the next generate_code step.
     {% endif %}
 
     {{ ctx.output_format }}
@@ -62,20 +68,24 @@ function ValidateOutput(input: ValidateCodeInput, systemprompt: string?) -> Vali
     The initial user request:
     {{ input.userPrompt }}
 
-    Directory Tree:
+    Directory Tree (for context):
     {{ input.dirTree }}
 
-    Dockerfile:
+    Dockerfile (for current iteration):
     {{ input.dockerfile }}
 
-    Files:
+    Code Files:
     {% for file in input.files %}
     #./{{ file.filename }}
     {{ file.content }}
     {% endfor %}
 
-    Output:
+    Container Output:
     {{ input.output }}
+
+    {% if input.iteration > 5 %}
+    Since we have been trying for a while, be less strict in what you consider a True result. Just that there are no errors is usually good enough.
+    {% endif %}
   "#
 }
 
@@ -99,3 +109,25 @@ test ValidateSimpleScript {
     }
   }
 }
+
+test NoDockerfilePreflight {
+  functions [ValidateOutput]
+  args {
+    input {
+      dirTree "/app/output/workspace_20250212_150959\n└── embeddings.csv\n\n1 directory, 1 file\n"
+      dockerfile "No Dockerfile yet"
+      files [
+        {
+          filename "embeddings.csv"
+          content "\"manu_name\",\"image_name\",\"base64_encoding\",\"image_vector\",\"filename_vector\",\"id\"\n\"Huizhou Suan Technology Co., Ltd.\",\"500 ml Digital Thermos Cup Intelligent  Temperature Display Water Bottle Heat Preservation Vacuum Thermos Flask For Coffee Tea\",\"/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwh... (truncated special ext)"
+        }
+      ]
+      iteration 1
+      output "No Dockerfile found. Preflight was skipped."
+      testConditions "no errors in output"
+      userPrompt "create a flask server that does cosine similarity with numpy on a user input vector with all the vectors in the embedding column of the provided CSV"
+    }
+  }
+}
+
+  

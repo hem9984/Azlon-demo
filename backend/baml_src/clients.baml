@@ -5,6 +5,7 @@ client<llm> DeepseekR1_14b {
   options {
     model deepseek-r1:14b
     base_url "http://local-llm:11434/v1"
+    temperature 0
     headers {
       allowed_role_metadata "autonomous coding agent"
     }
@@ -16,6 +17,7 @@ client<llm> Llama3 {
   options {
     model llama3
     base_url "http://local-llm:11434/v1"
+    temperature 0
     headers {
       allowed_role_metadata "autonomous coding agent"
     }
@@ -27,6 +29,7 @@ client<llm> Qwen2_5 {
   options {
     model qwen2.5
     base_url "http://local-llm:11434/v1"
+    temperature 0
     headers {
       allowed_role_metadata "autonomous coding agent"
     }
@@ -38,6 +41,7 @@ client<llm> DeepseekR1_8b {
   options {
     model deepseek-r1:8b
     base_url "http://local-llm:11434/v1"
+    temperature 0
     headers {
       allowed_role_metadata "autonomous coding agent"
     }
@@ -49,6 +53,7 @@ client<llm> DeepseekR1 {
   options {
     model deekseek-r1
     base_url "http://local-llm:11434/v1"
+    temperature 0
     headers {
       allowed_role_metadata "autonomous coding agent"
     }
@@ -63,11 +68,21 @@ template_string Foo() #"
 "#
 
 
-client<llm> CustomGPT4o {
+client<llm> Gpt4o_0temp {
   provider openai
   options {
     model "gpt-4o"
     api_key env.OPENAI_KEY
+    temperature 0
+  }
+}
+
+client<llm> Gpt4o_3temp {
+  provider openai
+  options {
+    model "gpt-4o"
+    api_key env.OPENAI_KEY
+    temperature 0.3
   }
 }
 
@@ -85,6 +100,7 @@ client<llm> CustomSonnet {
   options {
     model "claude-3-5-sonnet-20241022"
     api_key env.ANTHROPIC_API_KEY
+    temperature 0
   }
 }
 

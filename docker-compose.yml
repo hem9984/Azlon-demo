@@ -14,25 +14,25 @@ services:
       # - ollama:/root/.ollama
       # hard to make it use local models user has. macOS: ~/.ollama/models Linux: /usr/share/ollama/.ollama/models
   
-  local-llm:
-    #  For AMD GPUs:
-    #image: ollama/ollama:rocm
-    #  For NVIDIA GPUs:
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    ports:
-      - "11435:11434"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              capabilities: ["gpu"]
-              count: all
-    networks:
-      - restack-network
-    volumes:
-      - /usr/share/ollama/.ollama:/root/.ollama:rw
+  # local-llm:
+  #   #  For AMD GPUs:
+  #   #image: ollama/ollama:rocm
+  #   #  For NVIDIA GPUs:
+  #   image: ollama/ollama:latest
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11435:11434"
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             capabilities: ["gpu"]
+  #             count: all
+  #   networks:
+  #     - restack-network
+  #   volumes:
+  #     - /usr/share/ollama/.ollama:/root/.ollama:rw
     
 
   restack-engine:

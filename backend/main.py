@@ -1,15 +1,15 @@
 # ./backend/main.py
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Request # type: ignore
+from fastapi.middleware.cors import CORSMiddleware # type: ignore
+from fastapi.responses import JSONResponse # type: ignore
+from pydantic import BaseModel # type: ignore
 import time
 import os
 
 from src.prompts import get_prompts, set_prompts
-from restack_ai import Restack
-from restack_ai.restack import CloudConnectionOptions
+from restack_ai import Restack # type: ignore
+from restack_ai.restack import CloudConnectionOptions # type: ignore
 
 RESTACK_ENGINE_ADDRESS = os.getenv('RESTACK_ENGINE_ADDRESS')
 RESTACK_TEMPORAL_ADDRESS = os.getenv('RESTACK_TEMPORAL_ADDRESS')
@@ -21,7 +21,7 @@ app = FastAPI()
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000","http://localhost:8080"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]

@@ -1,87 +1,82 @@
 // ./backend/baml_src/generate_code.baml
 
-class FileItem {
-  filename string @description("Name of the file to generate")
-  content string @description(#"
-    Content of the file
-    Use triplequote strings to prevent escape characters
-    '''
-    [Code]
-    '''
-  "#)
-}
+//maybe tell it to only generate Dockerfile if there is something wrong with the current one
+// preflight directory tree and current directory tree both included in context window
+
+// in the readme it creates, it should describe the differences between the current and the new code, and why the new code is better
+// also make it provide snippets only of files that need to be changed
 
 class GenerateCodeInput {
-  /// The user's coding request
-  userPrompt string
-  /// The result of the preflight check
-  dirTree string? @description("Directory structure included for context.") 
-  preflight_result PreFlightOutput?
-  /// Test conditions the code must meet
-  testConditions string
+  userPrompt string @description("The user's coding request")
+  dirTree string? @description("Directory structure included for context.")
+  preflightResult PreFlightOutput? @description("Output from a previous preflight step")
+  testConditions string @description("Test conditions the code must meet")
+  validationResult ValidateCodeOutput? @description("Result from previous validation step if this is a retry")
 }
 
 class GenerateCodeOutput {
   dockerfile string @description(#"
-    Docker configuration for running the code
-    Use triplequote strings to prevent escape characters
-    '''
+    Docker configuration for running the code.
+    Use triple quotes to denote strings and prevent escape characters:
+    """
     [Code]
-    '''
+    """
   "#)
-  files FileItem[] @description("List of files to generate")
+  files FileItem[] @description("List of files to generate or update")
 }
-
-
-class PreFlightOutput {
-    dir_tree string
-    run_output string
-}
-
 
 template_string PrintPreFlight(pre: PreFlightOutput?) #"
     {% if pre %}
     Directory tree:
-    {{ pre.dir_tree }}
+    {{ pre.dirTree }}
+
     Run output:
-    {{ pre.run_output }}
+    {{ pre.runOutput }}
     {% endif %}
 "#
 
 function GenerateCode(input: GenerateCodeInput, systemprompt: string?) -> GenerateCodeOutput {
-  client CustomGPT4o
+  client Gpt4o_0temp
   prompt #"
     {% if systemprompt %}
     {{ systemprompt }}
     {% else %}
-    You are an autonomous coding agent. If you need to create new files, provide complete code. Otherwise, generate replacement code snippets. Assume a git merge of your snippet with the current state of the codebase will be applied.
+    You are an autonomous coding agent. Your goal is to generate or modify code files so that:
+    - The user's prompt requirements are met
+    - The code meets the given test conditions
+    - The Dockerfile is prepared to run the code automatically
 
-    Given the following requirements:
-    - Start with a readme.md containing a summary and step-by-step plan
-    - If a Dockerfile does not already exist or specific instructions are not provided, use python:3.10-slim as base Docker image
-    - Install necessary dependencies in Dockerfile
-    - Run multiple commands using CMD in the Dockerfile to set up the environment if needed
-    - Output must be visible on stdout without intervention
-    - Run multiple Python files in the Dockerfile using CDM if needed
-    - Follow the commands in the readme.md or user_prompt to ensure the code runs correctly
-    - Install any drivers or libraries required for the code to run in the Dockerfile
-    - Dockerfile should define ENTRYPOINT to run automatically
-    - Output must be visible on stdout without intervention
-    - Files should be ordered: readme.md, config files, main application files
+    Guidelines:
+    - Begin with readme.md that includes a summary and step-by-step plan.
+    - If a Dockerfile does not already exist, or no specific instructions are provided, use 'python:3.10-slim' as the base image.
+    - Install necessary dependencies in the Dockerfile.
+    - Ensure multiple commands or scripts can be run from the Dockerfile if needed.
+    - All program output should appear on stdout without additional intervention.
+    - Include any libraries or drivers needed for the code to run properly.
+    - Use ENTRYPOINT in the Dockerfile so the container runs automatically.
+    - The final code must pass the test conditions.
     {% endif %}
 
-    {{ ctx.output_format }}
+    {{ ctx.output_format(prefix = "answer with this schema: \n") }}
 
-    {{ _.role("user") }} User Request:
+    {{ _.role("user") }} 
+    # User Request:
     {{ input.userPrompt }}
 
-    Test Conditions:
+    # Test Conditions:
     {{ input.testConditions }}
-    Here is the current state of the codebase you will apply your changes to:
+
+    # Current State of the Codebase:
     Directory Tree: 
     {{ input.dirTree }}
-    Code files:
-    {{ PrintPreFlight(input.preflight_result) }}
+
+    # Preflight Info:
+    {{ PrintPreFlight(input.preflightResult) }}
+
+    {% if input.validationResult and not input.validationResult.result %}
+    # Previous Validation Results:
+    Failure Reason: {{ input.validationResult.reason }}
+    {% endif %}
   "#
 }
 
@@ -101,40 +96,6 @@ test GenerateComplexProject {
     input {
       userPrompt "Create a Flask API with a single endpoint that returns the current time"
       testConditions "API should respond to GET / with current timestamp in ISO format"
-    }
-  }
-}
-
-test tacos {
-  functions [GenerateCode]
-  args {
-    input {
-      userPrompt "instead of code, lets talk about chess"
-      testConditions "who is the best player of all time?"
-    }
-  }
-}
-
-test GenerateSimpleScriptWithPreflight {
-  functions [GenerateCode]
-  args {
-    input {
-      userPrompt "Create a hello world script"
-      testConditions "Script should print 'Hello, World!' to stdout"
-      preflight_result {
-        dir_tree "main.py"
-        run_output "Hello, World!"
-      }
-    }
-  }
-}
-
-test Linearregression {
-  functions [GenerateCode]
-  args {
-    input {
-      userPrompt "write a python script that performs linear regression on a csv file. create another file that generates the synthetic csv file to use on the first script"
-      testConditions "no errors in output"
     }
   }
 }
