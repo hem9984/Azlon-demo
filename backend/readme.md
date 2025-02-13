@@ -56,4 +56,4 @@ Visit the Developer UI to see your workflow already executed by the service: htt
 # How to run summary:
 * Change prompt and test cases in schedle_workflow.py to your project description
 * Add pyproject.toml (and poetry.lock if you have one) in the project root.
-* Set OPENAI_KEY as an environment variable.
+* Set OPENAI_API_KEY as an environment variable.

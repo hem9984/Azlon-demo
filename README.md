@@ -5,16 +5,19 @@ git clone https://github.com/hem9984/Azlon-demo.git
 cd Azlon-demo
 mkdir -p ./llm-output/input
 ```
-* llm-output directory can be anywhere on your computer, but then you have to edit the docker-compose.yml to your desired file path
+* PRO TIP: Bookmark llm-output and input directories in your file explorer for easy access
 ```
-echo "OPENAI_KEY=sk-..." > .env
+echo "OPENAI_API_KEY=sk-..." > .env
 ```
 ```
-docker compose up --build
+docker compose up --build --remove-orphans
 ```
 * Frontend UI: http://localhost:8080/
 * Restack UI: http://localhost:5233/
 * Default output directory: ./Azlon-demo/llm-output
+
+#### To exit
+CTR + C then "docker compose down"
 
 ### Usage in Frontend UI
 1. Enter your user_prompt and test_conditions. Optionally, add the files you wish it to start with in PATH_TO/llm-output/input
@@ -23,45 +26,15 @@ docker compose up --build
 * 🤖 It will recursively generate code, run the code, and fix the code if needed until it deems that your test case(s) are fulfilled. 
 -------------------------------------------------------------
 ## Overview
-This project sets up an autonomous coding workflow using Restack, OpenAI’s GPT models, Docker-in-Docker for building and running Docker images, and a frontend React UI to interact with the system. Users can provide a user_prompt and test_conditions to generate code automatically, run it in a containerized environment, and validate the results. Users can also toggle an "advanced mode" to edit system prompts directly.
+This project sets up an autonomous coding workflow using Restack, LLMs, Docker-in-Docker for building and running Docker images, and a frontend React UI to interact with the system. Users can provide a user_prompt and test_conditions to generate code automatically, run it in a containerized environment, and validate the results. Users can also toggle an "advanced mode" to edit system prompts directly.
 
 ## Prerequisites
 ### Docker & Docker Compose:
 * Ensure Docker (>= 20.10) and Docker Compose (>= 1.29) are installed.
 * Install Docker | Install Docker Compose
 
-### OpenAI API Key:
-* Sign up for OpenAI and get an API key: OpenAI API Keys
 
-# Setup Instructions
-
-1. Clone the Repository:
-```
-git clone https://github.com/hem9984/Azlon-demo.git
-cd Azlon-demo
-mkdir -p ./llm-output/input
-```
-
-2. Environment Variables: Create a .env file in the project root. Add your OpenAI key:
-```
-echo "OPENAI_KEY=sk-..." > .env
-```
-* Ensure this .env file contains OPENAI_KEY.
-
-## Build & Run the Full Stack with Docker Compose: 
-
-### The docker-compose.yml orchestrates:
-
-* restack-engine
-* docker-dind (Docker-in-Docker)
-* backend (FastAPI + Restack)
-* frontend (React UI)
-
-3. Start them all with one command:
-```
-docker compose up --build
-```
-### This will:
+### The above commands will:
 
 * Run Restack engine on http://localhost:5233 (and other ports as specified).
 * Run the backend on http://localhost:8000

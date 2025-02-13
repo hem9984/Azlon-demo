@@ -38,9 +38,15 @@ class ValidateCodeOutput {
     If false, fill in the rest of the fields.
   "#)
   
-  reason string? @description("If result is false, the reason or suspected cause for the failure, plus any insights on how to fix it.")
+  reason string? @description(#"
+  If result is false, the reason or suspected cause for the failure, plus any insights on how to fix it.
+  Think about a detailed explanation that would help a developer understand and correct the issue.
+  Think about the most likely reasons for the failure and provide a clear path to resolution.
+  Think about a solution that minimizes the possibility of breaking other parts of the codebase.
+  "#)
   suspectedFiles DirectlySuspectedFile[] @description(#"
   Files to be included in their entirety for the next iteration of generate_code.
+  Do not include data files such as CSVs. If the code is not using the CSV file properly, explain that in the reason field.
   "#)
   unsuspectedFiles UnsuspectedFile[] @description("Files not suspected to have caused the error; only a summary of their content is needed.")
 }

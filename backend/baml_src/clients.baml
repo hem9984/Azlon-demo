@@ -72,7 +72,7 @@ client<llm> Gpt4o_0temp {
   provider openai
   options {
     model "gpt-4o"
-    api_key env.OPENAI_KEY
+    api_key env.OPENAI_API_KEY
     temperature 0
   }
 }
@@ -81,7 +81,7 @@ client<llm> Gpt4o_3temp {
   provider openai
   options {
     model "gpt-4o"
-    api_key env.OPENAI_KEY
+    api_key env.OPENAI_API_KEY
     temperature 0.3
   }
 }
