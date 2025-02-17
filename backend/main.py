@@ -59,7 +59,8 @@ async def run_workflow(params: UserInput):
     api_key=RESTACK_ENGINE_API_KEY, # type: ignore
     address=RESTACK_TEMPORAL_ADDRESS,
     api_address=RESTACK_ENGINE_ADDRESS,
-    temporal_namespace="default")
+    temporal_namespace="default"
+    )
 
     # Initialize Restack with these options options=connection_options
     client = Restack(connection_options)

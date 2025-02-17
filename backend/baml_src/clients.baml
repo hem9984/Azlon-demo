@@ -67,7 +67,7 @@ template_string Foo() #"
   This will have none of the role metadata for Foo or FooWithout.
 "#
 
-
+// 4o
 client<llm> Gpt4o_0temp {
   provider openai
   options {
@@ -85,6 +85,50 @@ client<llm> Gpt4o_3temp {
     temperature 0.3
   }
 }
+
+// o1
+client<llm> Gpto1_0temp {
+  provider openai
+  options {
+    model "o1"
+    api_key env.OPENAI_API_KEY
+    temperature 0
+  }
+}
+
+client<llm> Gpto1_3temp {
+  provider openai
+  options {
+    model "o1"
+    api_key env.OPENAI_API_KEY
+    temperature 0.3
+  }
+}
+
+// o3
+client<llm> Gpto3_mini_0temp {
+  provider openai
+  options {
+    model "o3-mini"
+    api_key env.OPENAI_API_KEY
+    temperature 0
+  }
+}
+
+client<llm> Gpto3_mini_3temp {
+  provider openai
+  options {
+    model "o3-mini"
+    api_key env.OPENAI_API_KEY
+    temperature 0.3
+  }
+}
+
+
+
+
+
+
 
 client<llm> CustomGPT4oMini {
   provider openai
