@@ -3,7 +3,8 @@
 import asyncio
 import time
 from restack_ai import Restack
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
+from src.client import client
 
 @dataclass
 class InputParams:
@@ -11,16 +12,14 @@ class InputParams:
     test_conditions: str
 
 async def main():
-    client = Restack()
-
     workflow_id = f"{int(time.time() * 1000)}-AutonomousCodingWorkflow"
     runId = await client.schedule_workflow(
         workflow_name="AutonomousCodingWorkflow",
         workflow_id=workflow_id,
-        input=InputParams(
+        input=asdict(InputParams(
             user_prompt="Write a python script that prints 'hello world'",
             test_conditions="The script must print exactly 'hello world' and exit with code 0."
-        )
+        ))
     )
 
     result = await client.get_workflow_result(

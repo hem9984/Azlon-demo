@@ -38,7 +38,7 @@ template_string PrintPreFlight(pre: PreFlightOutput?) #"
 function GenerateCode(input: GenerateCodeInput, systemprompt: string?) -> GenerateCodeOutput {
   client Gpt4o_0temp
   prompt #"
-    {% if systemprompt %}
+    {% if systemprompt!=null %}
     {{ systemprompt }}
     {% else %}
     You are an autonomous coding agent. Your goal is to generate or modify code files so that:

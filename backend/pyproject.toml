@@ -16,7 +16,7 @@ restack-ai = "0.0.50"
 pydantic = "^2.10.3"
 fastapi = "0.115.4"  
 uvicorn = "^0.22.0"
-baml-py = "0.75.0"
+baml-py = "0.76.2"
 kaggle = "^1.6.17"
 
 [tool.poetry.dev-dependencies]

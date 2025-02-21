@@ -1,10 +1,7 @@
 # ./backend/src/functions/functions.py
 from restack_ai.function import function, log  # type: ignore
 from dataclasses import dataclass
-import os
 import subprocess
-from datetime import datetime
-from typing import List
 
 from src.baml_client.async_client import b 
 from src.baml_client.types import ( 
@@ -12,7 +9,7 @@ from src.baml_client.types import (
     ValidateCodeInput, ValidateCodeOutput,
     PreFlightOutput
 )
-from src.prompts import current_generate_code_prompt, current_validate_output_prompt
+from src.prompts import get_prompts
 
 @dataclass
 class RunCodeInput:
@@ -29,7 +26,9 @@ async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
     to produce a Dockerfile and code files.
     """
     log.info(f"generate_code started => {input}")
-    result = await b.GenerateCode(input, systemprompt=current_generate_code_prompt)
+    prompts = get_prompts()
+    # when i update prompts in frontend, it does not actually update the prompts from the default
+    result = await b.GenerateCode(input, systemprompt=prompts["generate_code_prompt"])
     return result
 
 @function.defn()
@@ -61,7 +60,8 @@ async def validate_output(input: ValidateCodeInput) -> ValidateCodeOutput:
     Call the BAML-based ValidateOutput function with system prompt.
     """
     log.info(f"validate_output => iteration {input.iteration}")
-    result = await b.ValidateOutput(input, systemprompt=current_validate_output_prompt)
+    prompts = get_prompts()
+    result = await b.ValidateOutput(input, systemprompt=prompts["validate_output_prompt"])
     return result
 
 @function.defn()

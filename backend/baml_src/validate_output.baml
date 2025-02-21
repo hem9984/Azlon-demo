@@ -54,7 +54,7 @@ class ValidateCodeOutput {
 function ValidateOutput(input: ValidateCodeInput, systemprompt: string?) -> ValidateCodeOutput {
   client Gpt4o_3temp
   prompt #"
-    {% if systemprompt %}
+    {% if systemprompt!=null %}
     {{ systemprompt }}
     {% else %}
     You are an iteration of an autonomous coding assistant agent. 
