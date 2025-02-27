@@ -22,6 +22,7 @@ class UnsuspectedFile {
 }
 
 class ValidateCodeInput {
+  memories MemoryItem[]? @description("All memories from previous iterations of the codebase.")
   dirTree string? @description("Directory structure included for context.")
   dockerfile string @description("The Dockerfile from the current code state or newly generated snippet.")
   files FileItem[] @description("All code files from the current iteration of the codebase.")
@@ -68,7 +69,11 @@ function ValidateOutput(input: ValidateCodeInput, systemprompt: string?) -> Vali
 
     {{ ctx.output_format }}
 
-    {{ _.role("user") }} The test conditions: 
+    {{ _.role("user") }} 
+    Memories from previous attempts:
+    {{ input.memories | json }}
+    
+    The test conditions: 
     {{ input.testConditions }}
 
     The initial user request:

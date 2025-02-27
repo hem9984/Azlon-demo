@@ -10,6 +10,7 @@ from src.baml_client.types import (
     PreFlightOutput
 )
 from src.prompts import get_prompts
+from src.memory_manager import get_all_memories, add_memory
 
 @dataclass
 class RunCodeInput:
@@ -27,8 +28,11 @@ async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
     """
     log.info(f"generate_code started => {input}")
     prompts = get_prompts()
-    # when i update prompts in frontend, it does not actually update the prompts from the default
-    result = await b.GenerateCode(input, systemprompt=prompts["generate_code_prompt"])
+# do get_all mem0 api call then pass the memories as an additional parameter in this call
+    memories = get_all_memories(agent_id="generate_code")
+    result = await b.GenerateCode(input, systemprompt=prompts["generate_code_prompt"], memories=memories)
+    # add the entire output of result to memories using mem0 add 
+    add_memory(result, agent_id="generate_code")
     return result
 
 @function.defn()
@@ -61,7 +65,11 @@ async def validate_output(input: ValidateCodeInput) -> ValidateCodeOutput:
     """
     log.info(f"validate_output => iteration {input.iteration}")
     prompts = get_prompts()
-    result = await b.ValidateOutput(input, systemprompt=prompts["validate_output_prompt"])
+    # do get_all mem0 api call then pass the memories as an additional parameter in this call
+    memories = get_all_memories(agent_id="validate_output")
+    result = await b.ValidateOutput(input, systemprompt=prompts["validate_output_prompt"], memories=memories)
+    # add the entire output of result to memories using mem0 add 
+    add_memory(result, agent_id="validate_output")
     return result
 
 @function.defn()

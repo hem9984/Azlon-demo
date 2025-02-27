@@ -7,6 +7,7 @@
 // also make it provide snippets only of files that need to be changed
 
 class GenerateCodeInput {
+  memories MemoryItem[]? @description("All memories from previous iterations of the codebase.")
   userPrompt string @description("The user's coding request")
   dirTree string? @description("Directory structure included for context.")
   preflightResult PreFlightOutput? @description("Output from a previous preflight step")
@@ -59,7 +60,10 @@ function GenerateCode(input: GenerateCodeInput, systemprompt: string?) -> Genera
 
     {{ ctx.output_format(prefix = "answer with this schema: \n") }}
 
-    {{ _.role("user") }} 
+    {{ _.role("user") }}
+    # Memories from previous attempts:
+    {{ input.memories | json }}
+
     # User Request:
     {{ input.userPrompt }}
 

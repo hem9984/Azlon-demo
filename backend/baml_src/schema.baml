@@ -9,3 +9,7 @@ class PreFlightOutput {
   dirTree string @description("Directory structure from preflight check")
   runOutput string @description("Output from preflight execution")
 }
+
+class MemoryItem {
+  content string @description("Content of the memory.")
+}
