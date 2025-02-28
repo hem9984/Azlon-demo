@@ -45,6 +45,12 @@ class ValidateCodeOutput {
   Think about the most likely reasons for the failure and provide a clear path to resolution.
   Think about a solution that minimizes the possibility of breaking other parts of the codebase.
   "#)
+
+  plan string? @description(#"
+  A new high-level plan of how to accomplish the goal. 
+  This should be a framework of the strategy to achieve the goal, and implementation steps.
+  "#)
+
   suspectedFiles DirectlySuspectedFile[] @description(#"
   Files to be included in their entirety for the next iteration of generate_code.
   Do not include data files such as CSVs. If the code is not using the CSV file properly, explain that in the reason field.
@@ -52,7 +58,7 @@ class ValidateCodeOutput {
   unsuspectedFiles UnsuspectedFile[] @description("Files not suspected to have caused the error; only a summary of their content is needed.")
 }
 
-function ValidateOutput(input: ValidateCodeInput, systemprompt: string?) -> ValidateCodeOutput {
+function ValidateOutput(input: ValidateCodeInput, systemprompt: string?, memories: MemoryItem[]?) -> ValidateCodeOutput {
   client Gpt4o_3temp
   prompt #"
     {% if systemprompt!=null %}
@@ -65,13 +71,15 @@ function ValidateOutput(input: ValidateCodeInput, systemprompt: string?) -> Vali
     - Select which files are likely the cause.
     - Provide short summaries for files that are *not* suspected to be the cause, 
       so they can still be used as context in the next generate_code step.
+
+    You are also the orchestrator and decision maker of the workflow. Create a new plan or refine the existing one to maximize the success of the code generation phase.
     {% endif %}
 
     {{ ctx.output_format }}
 
     {{ _.role("user") }} 
     Memories from previous attempts:
-    {{ input.memories | json }}
+    {{ input.memories }}
     
     The test conditions: 
     {{ input.testConditions }}
@@ -111,7 +119,7 @@ test ValidateSimpleScript {
           content #"
           print('Hello World')
           "#
-        }
+        },
       ]
       output "Hello World"
       userPrompt "Create a hello world script"
@@ -141,4 +149,22 @@ test NoDockerfilePreflight {
   }
 }
 
-  
+test ChangeOfPlan {
+  functions [ValidateOutput]
+  args {
+    input {
+      dirTree "/app/output/workspace_20250212_150959\n└── embeddings.csv\n\n1 directory, 1 file\n"
+      dockerfile "No Dockerfile yet"
+      files [
+        {
+          filename "embeddings.csv"
+          content "\"manu_name\",\"image_name\",\"base64_encoding\",\"image_vector\",\"filename_vector\",\"id\"\n\"Huizhou Suan Technology Co., Ltd.\",\"500 ml Digital Thermos Cup Intelligent  Temperature Display Water Bottle Heat Preservation Vacuum Thermos Flask For Coffee Tea\",\"/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwh... (truncated special ext)"
+        }
+      ]
+      iteration 4
+      output "Error: Pytorch no longer supports this functionality, use Tensorflow instead."
+      testConditions "no errors in output"
+      userPrompt "create a flask server that does cosine similarity with numpy on a user input vector with all the vectors in the embedding column of the provided CSV"
+    }
+  }
+}

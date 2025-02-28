@@ -1,0 +1,16 @@
+{
+  "name": "Azlon Dev Container",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "backend",
+  "workspaceFolder": "/app",
+  "remoteUser": "root",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-pyright.pyright"
+      ]
+    }
+  },
+  "postCreateCommand": "cd /app && poetry install"
+}

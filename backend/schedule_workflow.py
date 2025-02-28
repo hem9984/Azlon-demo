@@ -18,7 +18,7 @@ async def main():
         workflow_id=workflow_id,
         input=asdict(InputParams(
             user_prompt="Write a python script that prints 'hello world'",
-            test_conditions="The script must print exactly 'hello world' and exit with code 0."
+            test_conditions="The script must print exactly 'hello world'"
         ))
     )
 

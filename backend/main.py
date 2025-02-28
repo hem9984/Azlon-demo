@@ -1,15 +1,15 @@
 # ./backend/main.py
 
-from fastapi import FastAPI, HTTPException, Request # type: ignore
-from fastapi.middleware.cors import CORSMiddleware # type: ignore
-from fastapi.responses import JSONResponse # type: ignore
-from pydantic import BaseModel # type: ignore
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware 
+from fastapi.responses import JSONResponse 
+from pydantic import BaseModel 
 import time
 import os
 
 from src.client import client
 from src.prompts import get_prompts, set_prompts
-from restack_ai import Restack # type: ignore
+from restack_ai import Restack
 
 app = FastAPI()
 
@@ -54,7 +54,7 @@ async def run_workflow(params: UserInput):
         runId = await client.schedule_workflow(
             workflow_name="AutonomousCodingWorkflow",
             workflow_id=workflow_id,
-            input=params.model_dump()
+            input=params.model_dump() # type: ignore
         )
         result = await client.get_workflow_result(workflow_id=workflow_id, run_id=runId)
         return {"workflow_id": workflow_id, "result": result}

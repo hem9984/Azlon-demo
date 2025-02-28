@@ -1,6 +1,7 @@
 // ./backend/baml_src/generate_code.baml
 
-//maybe tell it to only generate Dockerfile if there is something wrong with the current one
+//maybe tell it to only generate Dockerfile if there is something wrong with the current one. AND EXPERIMENT WITH GIT MERGE ONLY
+// ADD MORE TEST EXAMPLES HERE
 // preflight directory tree and current directory tree both included in context window
 
 // in the readme it creates, it should describe the differences between the current and the new code, and why the new code is better
@@ -12,7 +13,7 @@ class GenerateCodeInput {
   dirTree string? @description("Directory structure included for context.")
   preflightResult PreFlightOutput? @description("Output from a previous preflight step")
   testConditions string @description("Test conditions the code must meet")
-  validationResult ValidateCodeOutput? @description("Result from previous validation step if this is a retry")
+  validationResult ValidateCodeOutput @description("Result from validator agent")
 }
 
 class GenerateCodeOutput {
@@ -36,7 +37,7 @@ template_string PrintPreFlight(pre: PreFlightOutput?) #"
     {% endif %}
 "#
 
-function GenerateCode(input: GenerateCodeInput, systemprompt: string?) -> GenerateCodeOutput {
+function GenerateCode(input: GenerateCodeInput, systemprompt: string?, memories: MemoryItem[]?) -> GenerateCodeOutput {
   client Gpt4o_0temp
   prompt #"
     {% if systemprompt!=null %}
@@ -46,9 +47,10 @@ function GenerateCode(input: GenerateCodeInput, systemprompt: string?) -> Genera
     - The user's prompt requirements are met
     - The code meets the given test conditions
     - The Dockerfile is prepared to run the code automatically
+    - Create as many files as necessary to fulfill the user's request.
 
     Guidelines:
-    - Begin with readme.md that includes a summary and step-by-step plan.
+    - Include a readme.md that includes a guide on how to run the code and a summary of how the code works.
     - If a Dockerfile does not already exist, or no specific instructions are provided, use 'python:3.10-slim' as the base image.
     - Install necessary dependencies in the Dockerfile.
     - Ensure multiple commands or scripts can be run from the Dockerfile if needed.
@@ -62,7 +64,7 @@ function GenerateCode(input: GenerateCodeInput, systemprompt: string?) -> Genera
 
     {{ _.role("user") }}
     # Memories from previous attempts:
-    {{ input.memories | json }}
+    {{ input.memories }}
 
     # User Request:
     {{ input.userPrompt }}
@@ -77,7 +79,7 @@ function GenerateCode(input: GenerateCodeInput, systemprompt: string?) -> Genera
     # Preflight Info:
     {{ PrintPreFlight(input.preflightResult) }}
 
-    {% if input.validationResult and not input.validationResult.result %}
+    {% if input.validationResult is not none and input.validationResult.reason %}
     # Previous Validation Results:
     Failure Reason: {{ input.validationResult.reason }}
     {% endif %}

@@ -62,6 +62,7 @@ services:
     build: ./backend
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MEM0_API_KEY=${MEM0_API_KEY}
       - DOCKER_HOST=tcp://docker-dind:2375
       - RESTACK_ENGINE_ADDRESS=http://restack:6233
       - RESTACK_TEMPORAL_ADDRESS=http://restack:7233
@@ -83,6 +84,7 @@ services:
     build: ./backend
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MEM0_API_KEY=${MEM0_API_KEY}
       - DOCKER_HOST=tcp://docker-dind:2375
       - RESTACK_ENGINE_ADDRESS=http://restack:6233
       - RESTACK_TEMPORAL_ADDRESS=http://restack:7233

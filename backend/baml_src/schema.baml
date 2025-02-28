@@ -12,4 +12,5 @@ class PreFlightOutput {
 
 class MemoryItem {
   content string @description("Content of the memory.")
+  @@dynamic
 }

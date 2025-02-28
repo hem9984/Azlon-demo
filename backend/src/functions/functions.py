@@ -1,7 +1,10 @@
 # ./backend/src/functions/functions.py
 from restack_ai.function import function, log  # type: ignore
+from restack_ai.workflow import workflow_info  # type: ignore
 from dataclasses import dataclass
 import subprocess
+import os
+import time
 
 from src.baml_client.async_client import b 
 from src.baml_client.types import ( 
@@ -28,11 +31,22 @@ async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
     """
     log.info(f"generate_code started => {input}")
     prompts = get_prompts()
-# do get_all mem0 api call then pass the memories as an additional parameter in this call
-    memories = get_all_memories(agent_id="generate_code")
+    
+    # Get the workflow ID using workflow_info()
+    try:
+        info = workflow_info()
+        workflow_id = info.workflow_id if info else None
+        log.info(f"Workflow info: {info}, workflow_id: {workflow_id}")
+    except Exception as e:
+        log.error(f"Error getting workflow info: {e}")
+        workflow_id = None
+    
+    # Get memories with run_id
+    memories = get_all_memories(agent_id="generate_code", run_id=workflow_id)
     result = await b.GenerateCode(input, systemprompt=prompts["generate_code_prompt"], memories=memories)
-    # add the entire output of result to memories using mem0 add 
-    add_memory(result, agent_id="generate_code")
+    
+    # Add result to memories with the same run_id
+    add_memory(result, agent_id="generate_code", run_id=workflow_id)
     return result
 
 @function.defn()
@@ -65,11 +79,22 @@ async def validate_output(input: ValidateCodeInput) -> ValidateCodeOutput:
     """
     log.info(f"validate_output => iteration {input.iteration}")
     prompts = get_prompts()
-    # do get_all mem0 api call then pass the memories as an additional parameter in this call
-    memories = get_all_memories(agent_id="validate_output")
+    
+    # Get the workflow ID using workflow_info()
+    try:
+        info = workflow_info()
+        workflow_id = info.workflow_id if info else None
+        log.info(f"Workflow info: {info}, workflow_id: {workflow_id}")
+    except Exception as e:
+        log.error(f"Error getting workflow info: {e}")
+        workflow_id = None
+    
+    # Get memories with run_id
+    memories = get_all_memories(agent_id="validate_output", run_id=workflow_id)
     result = await b.ValidateOutput(input, systemprompt=prompts["validate_output_prompt"], memories=memories)
-    # add the entire output of result to memories using mem0 add 
-    add_memory(result, agent_id="validate_output")
+    
+    # Add result to memories with the same run_id
+    add_memory(result, agent_id="validate_output", run_id=workflow_id)
     return result
 
 @function.defn()

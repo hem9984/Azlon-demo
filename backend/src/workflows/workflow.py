@@ -53,7 +53,7 @@ class AutonomousCodingWorkflow:
         if pfm.has_input_files():
             log.info("Pre-flight: merging user code + building container IF Dockerfile is found.")
             preflight_result = await workflow.step(
-                pre_flight_run,
+                pre_flight_run, #type: ignore
                 start_to_close_timeout=timedelta(seconds=600)
             )
             self._copy_preflight_workspace(preflight_result, workspace_path)
@@ -90,7 +90,7 @@ class AutonomousCodingWorkflow:
                 iteration=iteration
             )
             val_output: ValidateCodeOutput = await workflow.step(
-                validate_output,
+                validate_output, #type: ignore
                 val_input,
                 start_to_close_timeout=timedelta(seconds=300)
             )
@@ -108,7 +108,7 @@ class AutonomousCodingWorkflow:
 
                 # Generate new code
                 gen_output: GenerateCodeOutput = await workflow.step(
-                    generate_code,
+                    generate_code, #type: ignore
                     GenerateCodeInput(
                         userPrompt=input.user_prompt,
                         testConditions=input.test_conditions,
@@ -128,7 +128,7 @@ class AutonomousCodingWorkflow:
 
                 # Run container
                 run_result_obj = await workflow.step(
-                    run_locally,
+                    run_locally, #type: ignore
                     RunCodeInput(repo_path=workspace_path),
                     start_to_close_timeout=timedelta(seconds=900)
                 )
