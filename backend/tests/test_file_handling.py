@@ -1,219 +1,128 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 """
-Tests for file_handling module.
+Unit tests for the file_handling module
 """
+
+from unittest.mock import patch
+
 import pytest
-import os
-import subprocess
-import shutil
-from unittest.mock import patch, MagicMock, mock_open
-from src.utils.file_handling import (
-    GitManager, CodeInclusionManager, PreFlightManager, run_tree_command
-)
+
+from src.utils.file_handling import PreFlightManager
 
 
-@pytest.fixture
-def mock_subprocess_run():
-    """Fixture to mock subprocess.run."""
-    with patch('src.utils.file_handling.subprocess.run') as mock_run:
-        yield mock_run
+class TestPreFlightManager:
+    """Tests for the PreFlightManager class."""
 
+    @pytest.fixture
+    def file_server_mock(self):
+        """Mock the file_server module."""
+        with patch(
+            "src.utils.file_handling.create_bucket_if_not_exists"
+        ) as create_bucket_mock, patch(
+            "src.utils.file_handling.upload_file"
+        ) as upload_file_mock, patch(
+            "src.utils.file_handling.download_file"
+        ) as download_file_mock, patch(
+            "src.utils.file_handling.list_files"
+        ) as list_files_mock, patch(
+            "src.utils.file_handling.generate_directory_tree"
+        ) as gen_dir_tree_mock:
+            create_bucket_mock.return_value = None
+            upload_file_mock.return_value = True
+            download_file_mock.return_value = b"test content"
+            list_files_mock.return_value = [
+                {"key": "user/run/file1.txt", "size": 100, "last_modified": "2023-01-01"},
+                {"key": "user/run/dir1/file2.txt", "size": 200, "last_modified": "2023-01-02"},
+            ]
+            gen_dir_tree_mock.return_value = "├── file1.txt\n└── dir1\n    └── file2.txt"
 
-@pytest.fixture
-def mock_os_path_isdir():
-    """Fixture to mock os.path.isdir."""
-    with patch('src.utils.file_handling.os.path.isdir') as mock_isdir:
-        yield mock_isdir
+            yield {
+                "create_bucket": create_bucket_mock,
+                "upload_file": upload_file_mock,
+                "download_file": download_file_mock,
+                "list_files": list_files_mock,
+                "generate_directory_tree": gen_dir_tree_mock,
+            }
 
+    @pytest.fixture
+    def preflight_manager(self):
+        """Create an instance of PreFlightManager with test parameters."""
+        manager = PreFlightManager(
+            user_id="test-user", run_id="test-run", bucket_name="test-bucket"
+        )
+        return manager
 
-@pytest.fixture
-def mock_os_path_isfile():
-    """Fixture to mock os.path.isfile."""
-    with patch('src.utils.file_handling.os.path.isfile') as mock_isfile:
-        yield mock_isfile
+    def test_init(self, preflight_manager, file_server_mock):
+        """Test initialization."""
+        assert preflight_manager.user_id == "test-user"
+        assert preflight_manager.run_id == "test-run"
+        assert preflight_manager.bucket_name == "test-bucket"
+        assert preflight_manager.base_prefix == "test-user/test-run/"
+        file_server_mock["create_bucket"].assert_called_once_with("test-bucket")
 
+    def test_get_object_key(self, preflight_manager):
+        """Test getting an object key with the correct prefix."""
+        key = preflight_manager.get_object_key("file.txt")
+        assert key == "test-user/test-run/file.txt"
 
-@pytest.fixture
-def mock_os_makedirs():
-    """Fixture to mock os.makedirs."""
-    with patch('src.utils.file_handling.os.makedirs') as mock_makedirs:
-        yield mock_makedirs
+        # Test with subdirectory
+        key = preflight_manager.get_object_key("dir/file.txt")
+        assert key == "test-user/test-run/dir/file.txt"
 
+    def test_collect_and_upload_files_local(self, preflight_manager, file_server_mock, tmp_path):
+        """Test collecting and uploading files from a local directory."""
+        # Create temporary files
+        dir1 = tmp_path / "dir1"
+        dir1.mkdir()
+        file1 = tmp_path / "file1.txt"
+        file1.write_text("content1")
+        file2 = dir1 / "file2.txt"
+        file2.write_text("content2")
 
-@pytest.fixture
-def mock_os_listdir():
-    """Fixture to mock os.listdir."""
-    with patch('src.utils.file_handling.os.listdir') as mock_listdir:
-        yield mock_listdir
+        # Call the function
+        with patch("src.utils.file_handling.os.walk") as mock_walk:
+            mock_walk.return_value = [
+                (str(tmp_path), ["dir1"], ["file1.txt"]),
+                (str(dir1), [], ["file2.txt"]),
+            ]
 
+            preflight_manager.collect_and_upload_files(str(tmp_path))
 
-@pytest.fixture
-def mock_shutil_copy2():
-    """Fixture to mock shutil.copy2."""
-    with patch('src.utils.file_handling.shutil.copy2') as mock_copy2:
-        yield mock_copy2
+        # Assertions
+        assert file_server_mock["upload_file"].call_count == 2
 
+    def test_download_and_list_files(self, preflight_manager, file_server_mock):
+        """Test downloading and listing files."""
+        # Call the function
+        files = preflight_manager.list_files()
 
-@pytest.fixture
-def mock_shutil_copytree():
-    """Fixture to mock shutil.copytree."""
-    with patch('src.utils.file_handling.shutil.copytree') as mock_copytree:
-        yield mock_copytree
+        # Assertions
+        file_server_mock["list_files"].assert_called_once_with("test-bucket", "test-user/test-run/")
+        assert len(files) == 2
+        assert files[0]["key"] == "user/run/file1.txt"
 
+    def test_download_file(self, preflight_manager, file_server_mock):
+        """Test downloading a file."""
+        # Call the function
+        content = preflight_manager.download_file("file.txt")
 
-@pytest.fixture
-def mock_open_file():
-    """Fixture to mock open function."""
-    with patch('builtins.open', mock_open(read_data="test content")) as mock_file:
-        yield mock_file
+        # Assertions
+        file_server_mock["download_file"].assert_called_once_with(
+            "test-bucket", "test-user/test-run/file.txt"
+        )
+        assert content == b"test content"
 
+    def test_generate_directory_tree(self, preflight_manager, file_server_mock):
+        """Test generating a directory tree."""
+        # Call the function
+        tree = preflight_manager.generate_directory_tree()
 
-# GitManager Tests
-def test_git_manager_init_new_repo(mock_os_path_isdir, mock_os_makedirs, mock_subprocess_run):
-    """Test GitManager initialization with a new repository."""
-    # Setup
-    mock_os_path_isdir.side_effect = [True, False]  # repo_path exists, .git doesn't
-    
-    # Execute
-    git_manager = GitManager("/test/path")
-    
-    # Assert
-    mock_os_makedirs.assert_not_called()  # repo_path already exists
-    assert mock_subprocess_run.call_count == 3  # git init, config user.name, config user.email
-    assert git_manager.repo_path == "/test/path"
-
-
-def test_git_manager_init_existing_repo(mock_os_path_isdir, mock_os_makedirs):
-    """Test GitManager initialization with an existing repository."""
-    # Setup
-    mock_os_path_isdir.return_value = True  # Both repo_path and .git exist
-    
-    # Execute
-    git_manager = GitManager("/test/path")
-    
-    # Assert
-    mock_os_makedirs.assert_not_called()
-    assert git_manager.repo_path == "/test/path"
-
-
-def test_git_manager_merge_llm_changes(mock_subprocess_run, mock_os_path_isdir, mock_open_file):
-    """Test GitManager merge_llm_changes method."""
-    # Setup
-    mock_os_path_isdir.return_value = True
-    git_manager = GitManager("/test/path")
-    mock_subprocess_run.reset_mock()  # Clear calls from init
-    
-    # Execute
-    git_manager.merge_llm_changes(
-        llm_dockerfile="FROM python:3.9",
-        llm_files=[
-            {"filename": "test.py", "content": "print('hello')"}
-        ]
-    )
-    
-    # Assert
-    # Check git commands were called: checkout, branch, add, commit, checkout, merge
-    assert mock_subprocess_run.call_count >= 6
-
-
-# CodeInclusionManager Tests
-def test_code_inclusion_manager_init():
-    """Test CodeInclusionManager initialization."""
-    manager = CodeInclusionManager("/test/path")
-    assert manager.repo_path == "/test/path"
-    assert manager.token_count == 0
-
-
-def test_build_code_context(mock_os_path_isfile, mock_os_listdir, mock_open_file):
-    """Test build_code_context method."""
-    # Setup
-    mock_os_path_isfile.return_value = True
-    mock_os_listdir.return_value = ["file1.py", "file2.py", "file3.csv"]
-    manager = CodeInclusionManager("/test/path")
-    
-    # Execute
-    with patch.object(manager, '_build_directory_tree', return_value="tree output"):
-        with patch.object(manager, '_read_dockerfile', return_value="FROM python:3.9"):
-            with patch.object(manager, '_gather_files', return_value=[
-                {"filename": "file1.py", "content": "print('hello')"}
-            ]):
-                result = manager.build_code_context(
-                    user_prompt="Create a script",
-                    test_conditions="Must work",
-                    previous_output="Output from previous run"
-                )
-    
-    # Assert
-    assert result["dirTree"] == "tree output"
-    assert result["dockerfile"] == "FROM python:3.9"
-    assert len(result["files"]) == 1
-    assert result["files"][0]["filename"] == "file1.py"
-
-
-# PreFlightManager Tests
-def test_has_input_files(mock_os_path_isdir, mock_os_listdir):
-    """Test has_input_files method."""
-    # Setup
-    mock_os_path_isdir.return_value = True
-    mock_os_listdir.return_value = ["file1.py"]
-    manager = PreFlightManager()
-    
-    # Execute
-    result = manager.has_input_files()
-    
-    # Assert
-    assert result is True
-
-
-def test_perform_preflight_merge_and_run(mock_os_path_isdir, mock_os_makedirs, mock_os_listdir, mock_subprocess_run):
-    """Test perform_preflight_merge_and_run method."""
-    # Setup
-    mock_os_path_isdir.return_value = True
-    mock_os_listdir.return_value = ["file1.py", "Dockerfile"]
-    manager = PreFlightManager()
-    
-    # Mock methods to isolate the test
-    with patch.object(manager, '_collect_input_files', return_value={
-        "files": [{"filename": "file1.py", "content": "print('hello')"}],
-        "dockerfile": "FROM python:3.9"
-    }):
-        with patch('src.utils.file_handling.run_tree_command', return_value="tree output"):
-            # Execute
-            result = manager.perform_preflight_merge_and_run()
-    
-    # Assert
-    assert result.dirTree == "tree output"
-    assert "docker build" in result.runOutput or "docker run" in result.runOutput
-
-
-# Helper function tests
-def test_run_tree_command(mock_subprocess_run):
-    """Test run_tree_command function."""
-    # Setup
-    mock_subprocess_run.return_value = MagicMock(
-        stdout="directory tree output",
-        returncode=0
-    )
-    
-    # Execute
-    result = run_tree_command("/test/directory")
-    
-    # Assert
-    mock_subprocess_run.assert_called_once()
-    assert result == "directory tree output"
-
-
-def test_run_tree_command_error(mock_subprocess_run):
-    """Test run_tree_command function when command fails."""
-    # Setup
-    mock_subprocess_run.return_value = MagicMock(
-        stdout="",
-        stderr="error output",
-        returncode=1
-    )
-    
-    # Execute
-    result = run_tree_command("/test/directory")
-    
-    # Assert
-    mock_subprocess_run.assert_called_once()
-    assert "Error" in result
+        # Assertions
+        file_server_mock["generate_directory_tree"].assert_called_once_with(
+            "test-bucket", "test-user/test-run/"
+        )
+        assert "file1.txt" in tree
+        assert "dir1" in tree
+        assert "file2.txt" in tree

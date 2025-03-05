@@ -1,14 +1,19 @@
 # ./backend/src/utils/file_handling.py
+import csv
+import json
+import logging
 import os
 import re
-import json
-import csv
+import shutil
 import subprocess
 import time
-import shutil
-from datetime import datetime
-from typing import List, Dict, Optional, Any
-import logging
+from typing import Any, Dict, List, Optional
+
+# Import E2B for sandbox execution
+try:
+    E2B_AVAILABLE = True
+except ImportError:
+    E2B_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +22,7 @@ from src.baml_client.types import PreFlightOutput
 # ---------------------------------------------------------------------
 # GitManager
 # ---------------------------------------------------------------------
+
 
 class GitManager:
     def __init__(self, repo_path: str):
@@ -34,9 +40,11 @@ class GitManager:
 
     def _config_identity(self):
         subprocess.run(["git", "config", "user.name", "AzlonBot"], cwd=self.repo_path, check=True)
-        subprocess.run(["git", "config", "user.email", "azlon@local"], cwd=self.repo_path, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "azlon@local"], cwd=self.repo_path, check=True
+        )
 
-    def _commit_all(self, message: str, allow_empty: bool=True):
+    def _commit_all(self, message: str, allow_empty: bool = True):
         subprocess.run(["git", "add", "-A"], cwd=self.repo_path, check=True)
         cmd = ["git", "commit", "-m", message]
         if allow_empty:
@@ -47,7 +55,7 @@ class GitManager:
         subprocess.run(
             ["git", "merge", "llm-changes", "-X", "theirs", "--allow-unrelated-histories"],
             cwd=self.repo_path,
-            check=True
+            check=True,
         )
 
     def merge_llm_changes(self, llm_dockerfile: Optional[str], llm_files: Optional[List[Any]]):
@@ -57,6 +65,7 @@ class GitManager:
         Then commit on branch 'llm-changes' and merge with 'main'.
         """
         from src.baml_client.types import FileItem
+
         changes: List[FileItem] = []
 
         if llm_dockerfile and llm_dockerfile.strip():
@@ -88,9 +97,11 @@ class GitManager:
         subprocess.run(["git", "checkout", "main"], cwd=self.repo_path, check=True)
         self._auto_merge_theirs()
 
+
 # ---------------------------------------------------------------------
 # CodeInclusionManager
 # ---------------------------------------------------------------------
+
 
 def run_tree_command(directory: str) -> str:
     try:
@@ -100,26 +111,26 @@ def run_tree_command(directory: str) -> str:
         logger.warning(f"Failed to run 'tree' on {directory}: {e}")
         return ""
 
+
 class CodeInclusionManager:
     """
     Decides what files to include in ValidateCodeInput.files.
     We do partial reading/truncation for large files, and special summarization for CSV.
     """
+
     special_exts = {".csv", ".numpy", ".npy", ".tsv"}
 
     def __init__(self, repo_path: str):
         self.repo_path = repo_path
         self.token_count = 0
 
-    def build_code_context(self, user_prompt: str, test_conditions: str, previous_output: str) -> Dict[str, Any]:
+    def build_code_context(
+        self, user_prompt: str, test_conditions: str, previous_output: str
+    ) -> Dict[str, Any]:
         tree_str = self._build_directory_tree()
         dockerfile_content = self._read_dockerfile()
         code_files = self._gather_files()
-        return {
-            "dirTree": tree_str,
-            "dockerfile": dockerfile_content,
-            "files": code_files
-        }
+        return {"dirTree": tree_str, "dockerfile": dockerfile_content, "files": code_files}
 
     def _build_directory_tree(self) -> str:
         raw_tree = run_tree_command(self.repo_path)
@@ -174,11 +185,14 @@ class CodeInclusionManager:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 reader = csv.DictReader(f)
                 if not reader.fieldnames:
-                    return json.dumps({
-                        "column_names": [],
-                        "sample_rows": [],
-                        "summary": "CSV has no header row or is empty."
-                    }, indent=2)
+                    return json.dumps(
+                        {
+                            "column_names": [],
+                            "sample_rows": [],
+                            "summary": "CSV has no header row or is empty.",
+                        },
+                        indent=2,
+                    )
 
                 columns = reader.fieldnames
                 sample_rows = []
@@ -195,7 +209,7 @@ class CodeInclusionManager:
                 data = {
                     "column_names": columns,
                     "sample_rows": sample_rows,
-                    "summary": summary_text
+                    "summary": summary_text,
                 }
                 return json.dumps(data, indent=2)
         except Exception as e:
@@ -254,8 +268,8 @@ class CodeInclusionManager:
             else:
                 lines = raw_text.splitlines()
                 snippet_lines = []
-                pat_def = re.compile(r'^\s*(def|class)\s+\w+.*:')
-                pat_return = re.compile(r'\breturn\b')
+                pat_def = re.compile(r"^\s*(def|class)\s+\w+.*:")
+                pat_return = re.compile(r"\breturn\b")
                 for ln in lines:
                     if pat_def.search(ln) or pat_return.search(ln):
                         snippet_lines.append(ln)
@@ -271,112 +285,202 @@ class CodeInclusionManager:
         else:
             return None
 
+
 # ---------------------------------------------------------------------
 # PreFlightManager
 # ---------------------------------------------------------------------
 
+
 class PreFlightManager:
+    def __init__(self, user_id: Optional[str] = None, run_id: Optional[str] = None):
+        self.user_id = user_id or "anonymous"
+        self.run_id = run_id or str(int(time.time() * 1000))
+        self.bucket_name = "azlon-files"
+
     def has_input_files(self) -> bool:
+        """
+        Check if there are input files in the /input directory or in MinIO
+        """
+        # First check local input directory for backward compatibility
         input_dir = os.path.join(os.environ.get("LLM_OUTPUT_DIR", "/app/output"), "input")
-        if not os.path.isdir(input_dir):
-            return False
-        for _, dirs, files in os.walk(input_dir):
+        local_has_files = False
+
+        if os.path.isdir(input_dir):
+            for _, _, files in os.walk(input_dir):
+                if files:
+                    local_has_files = True
+                    break
+
+        # Then check MinIO
+        minio_has_files = False
+        try:
+            from src.file_server import list_files
+
+            files = list_files(self.bucket_name, f"input/{self.user_id}/")
             if files:
-                return True
-        return False
+                minio_has_files = True
+        except Exception as e:
+            logger.error(f"Error checking MinIO for input files: {e}")
+
+        return local_has_files or minio_has_files
 
     def perform_preflight_merge_and_run(self) -> "PreFlightOutput":
         """
         Create ephemeral folder, merges user code from /input.
-        If there's a Dockerfile, build & run once. Otherwise skip building.
+        If there's a Dockerfile, build & run once using E2B.
         Returns PreFlightOutput with dirTree & runOutput describing success/failure.
         """
+        # Create the directory structure: llm-output/<user_id>/<run_id>/preflight
         base_output = os.environ.get("LLM_OUTPUT_DIR", "/app/output")
-        stamp = time.strftime("%Y%m%d_%H%M%S")
-        run_folder = os.path.join(base_output, f"preflight_{stamp}")
+
+        # Create user directory if it doesn't exist
+        user_dir = os.path.join(base_output, self.user_id)
+        os.makedirs(user_dir, exist_ok=True)
+
+        # Create run directory if it doesn't exist
+        run_dir = os.path.join(user_dir, self.run_id)
+        os.makedirs(run_dir, exist_ok=True)
+
+        # Create preflight directory inside the run directory
+        run_folder = os.path.join(run_dir, "preflight")
         if os.path.exists(run_folder):
             shutil.rmtree(run_folder)
         os.makedirs(run_folder, exist_ok=True)
 
-        user_json = self._collect_input_files()
-        from src.baml_client.types import PreFlightOutput
-        from .file_handling import GitManager, run_tree_command
-
-        gm = GitManager(run_folder)
-        gm.merge_llm_changes(
-            llm_dockerfile=user_json["dockerfile"].strip() or None,
-            llm_files=user_json["files"]
+        logger.info(
+            f"Created preflight directory at {run_folder} for user {self.user_id}, run {self.run_id}"
         )
 
-        tree_str = run_tree_command(run_folder)
+        # Collect files from local input and/or MinIO
+        user_json = self._collect_input_files(run_folder)
+
+        # Also upload collected files to MinIO for E2B
+        self._upload_files_to_minio(user_json)
+
+        # Generate directory tree (using MinIO if possible)
+        try:
+            from src.file_server import generate_directory_tree
+
+            tree_str = generate_directory_tree(self.bucket_name, f"{self.user_id}/{self.run_id}/")
+        except Exception as e:
+            logger.error(f"Error generating MinIO directory tree: {e}")
+            # Fallback to local tree
+            tree_str = run_tree_command(run_folder)
 
         # If no Dockerfile, skip building
         if not user_json["dockerfile"].strip():
             return PreFlightOutput(
-                dirTree=tree_str,
-                runOutput="No Dockerfile found. Preflight was skipped."
+                dirTree=tree_str, runOutput="No Dockerfile found. Preflight was skipped."
             )
 
-        # Attempt Docker build & run
+        # Run docker container using E2B
         try:
-            build_cmd = ["docker", "build", "-t", "preflight_app", run_folder]
-            build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
+            import asyncio
 
-            if build_proc.returncode != 0:
-                return PreFlightOutput(
-                    dirTree=tree_str,
-                    runOutput=(build_proc.stderr or build_proc.stdout)
+            from src.e2b_functions import E2BFunctions
+
+            e2b = E2BFunctions()
+            result = asyncio.run(
+                e2b.run_docker_container(self.user_id, self.run_id, self.bucket_name)
+            )
+
+            # Update the tree after execution
+            try:
+                tree_str = generate_directory_tree(
+                    self.bucket_name, f"{self.user_id}/{self.run_id}/"
                 )
+            except Exception:
+                pass
 
-            run_cmd = [
-                "docker", "run", "--rm",
-                "-v", f"{run_folder}:/app",
-                "preflight_app"
-            ]
-            run_proc = subprocess.run(run_cmd, capture_output=True, text=True)
-            return PreFlightOutput(
-                dirTree=run_tree_command(run_folder),
-                runOutput=(run_proc.stderr or run_proc.stdout)
-                if run_proc.returncode != 0 else run_proc.stdout
-            )
+            return PreFlightOutput(dirTree=tree_str, runOutput=result["output"])
         except Exception as e:
-            return PreFlightOutput(
-                dirTree=tree_str,
-                runOutput=f"Preflight exception: {e}"
-            )
+            logger.error(f"Error running preflight with E2B: {str(e)}")
+            return PreFlightOutput(dirTree=tree_str, runOutput=f"Preflight exception: {e}")
 
     def _collect_input_files(self) -> Dict[str, Any]:
         """
-        Gather all subdirs/files from /input (except .git). The first Dockerfile becomes user_json["dockerfile"].
-        Everything else goes into user_json["files"].
+        Gather files from /input directory (locally) and/or from MinIO input/ prefix.
+        Returns a dictionary with "dockerfile" and "files" keys.
         """
-        input_dir = os.path.join(os.environ.get("LLM_OUTPUT_DIR", "/app/output"), "input")
         dockerfile_contents = ""
         collected = []
 
-        if not os.path.isdir(input_dir):
-            return {"dockerfile": "", "files": []}
+        # First collect from local input directory
+        input_dir = os.path.join(os.environ.get("LLM_OUTPUT_DIR", "/app/output"), "input")
 
-        for root, dirs, files in os.walk(input_dir):
-            if ".git" in dirs:
-                dirs.remove(".git")
+        if os.path.isdir(input_dir):
+            for root, dirs, files in os.walk(input_dir):
+                if ".git" in dirs:
+                    dirs.remove(".git")
 
-            for fname in files:
-                full_path = os.path.join(root, fname)
-                rel_path = os.path.relpath(full_path, input_dir)
+                for fname in files:
+                    full_path = os.path.join(root, fname)
+                    rel_path = os.path.relpath(full_path, input_dir)
 
-                try:
-                    with open(full_path, "r", encoding="utf-8") as ff:
-                        content = ff.read()
-                except:
-                    content = ""
+                    try:
+                        with open(full_path, "r", encoding="utf-8") as ff:
+                            content = ff.read()
+                    except:
+                        content = ""
 
-                if fname.lower() == "dockerfile" and not dockerfile_contents:
-                    dockerfile_contents = content
-                else:
-                    collected.append({"filename": rel_path, "content": content})
+                    if fname.lower() == "dockerfile" and not dockerfile_contents:
+                        dockerfile_contents = content
+                    else:
+                        collected.append({"filename": rel_path, "content": content})
 
-        return {
-            "dockerfile": dockerfile_contents,
-            "files": collected
-        }
+        # Then check MinIO for input files
+        try:
+            from src.file_server import download_file, list_files
+
+            files = list_files(self.bucket_name, f"input/{self.user_id}/")
+
+            for file_info in files:
+                key = file_info["key"]
+
+                # Skip already processed files
+                rel_path = key.replace(f"input/{self.user_id}/", "")
+                if any(item["filename"] == rel_path for item in collected):
+                    continue
+
+                content = download_file(self.bucket_name, key)
+                if content and isinstance(content, bytes):
+                    content_str = content.decode("utf-8", errors="replace")
+
+                    if rel_path.lower() == "dockerfile" and not dockerfile_contents:
+                        dockerfile_contents = content_str
+                    else:
+                        collected.append({"filename": rel_path, "content": content_str})
+        except Exception as e:
+            logger.error(f"Error collecting files from MinIO: {e}")
+
+        return {"dockerfile": dockerfile_contents, "files": collected}
+
+    def _upload_files_to_minio(self, user_json: Dict[str, Any]) -> None:
+        """
+        Upload the collected files to MinIO for the E2B execution
+        """
+        try:
+            import io
+
+            from src.file_server import create_bucket_if_not_exists, upload_file
+
+            # Ensure bucket exists
+            create_bucket_if_not_exists(self.bucket_name)
+
+            # Upload Dockerfile if present
+            if user_json["dockerfile"]:
+                object_name = f"{self.user_id}/{self.run_id}/Dockerfile"
+                upload_file(
+                    io.BytesIO(user_json["dockerfile"].encode("utf-8")),
+                    self.bucket_name,
+                    object_name,
+                )
+
+            # Upload other files
+            for file_item in user_json["files"]:
+                object_name = f"{self.user_id}/{self.run_id}/{file_item['filename']}"
+                upload_file(
+                    io.BytesIO(file_item["content"].encode("utf-8")), self.bucket_name, object_name
+                )
+        except Exception as e:
+            logger.error(f"Error uploading files to MinIO: {e}")

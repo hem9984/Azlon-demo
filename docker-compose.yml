@@ -35,43 +35,68 @@ services:
   #     - /usr/share/ollama/.ollama:/root/.ollama:rw
     
 
-  restack-engine:
-    image: ghcr.io/restackio/restack:main
-    container_name: restack
+  # restack-engine - Commented out since we're using cloud version
+  # restack-engine:
+  #   image: ghcr.io/restackio/restack:main
+  #   container_name: restack
+  #   restart: unless-stopped
+  #   networks:
+  #     - restack-network
+  #   ports:
+  #     - "5233:5233"
+  #     - "6233:6233"
+  #     - "7233:7233"
+
+  # Commented out docker-dind as we're using E2B instead
+  # docker-dind:
+  #   image: docker:23-dind
+  #   privileged: true
+  #   command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+  #   environment:
+  #     DOCKER_TLS_CERTDIR: ""
+  #   networks:
+  #     - restack-network
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./llm-output:/app/output:rw
+
+  # Add MinIO server for file storage (S3 API compatible)
+  minio:
+    image: quay.io/minio/minio
+    container_name: minio
     restart: unless-stopped
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-AKIAIOSFODSAOHDSALJ/2882}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-wJalrXUtnFEMI/KDASKJDSADSADSAKJ03283208320}
     networks:
       - restack-network
     ports:
-      - "5233:5233"
-      - "6233:6233"
-      - "7233:7233"
-
-  docker-dind:
-    image: docker:23-dind
-    privileged: true
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
-    environment:
-      DOCKER_TLS_CERTDIR: ""
-    networks:
-      - restack-network
-    restart: unless-stopped
+      - "9000:9000"
+      - "9001:9001"
     volumes:
-      - ./llm-output:/app/output:rw
+      - ./llm-output:/data:rw
+    command: server /data --console-address ":9001"
 
   backend:
     build: ./backend
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - MEM0_API_KEY=${MEM0_API_KEY}
-      - DOCKER_HOST=tcp://docker-dind:2375
-      - RESTACK_ENGINE_ADDRESS=http://restack:6233
-      - RESTACK_TEMPORAL_ADDRESS=http://restack:7233
-      - RESTACK_ENGINE_ID = "local"
-      - RESTACK_ENGINE_API_KEY = None
+      - E2B_API_KEY=${E2B_API_KEY}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-AKIAIOSFODSAOHDSALJ/2882}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-wJalrXUtnFEMI/KDASKJDSADSADSAKJ03283208320}
+      - MINIO_USE_SSL=false
+      - BACKEND_URL=http://backend:8000
+      #  NOW ONLY NEED ONE CONTAINER SINCE RUNNING CODE IS DELEGATED TO RESTACK CLOUD
+      # - DOCKER_HOST=tcp://docker-dind:2375
+      # - RESTACK_ENGINE_ADDRESS=http://restack:6233
+      # - RESTACK_TEMPORAL_ADDRESS=http://restack:7233
+      # - RESTACK_ENGINE_ID = "local"
+      # - RESTACK_ENGINE_API_KEY = None
       - LLM_OUTPUT_DIR=/app/output
     depends_on:
-      - restack-engine
-      - docker-dind
+      - minio
     command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
     networks:
       - restack-network
@@ -83,17 +108,32 @@ services:
   worker:
     build: ./backend
     environment:
+      - RESTACK_ENGINE_API_KEY=${RESTACK_ENGINE_API_KEY}
+      - RESTACK_ENGINE_ID=${RESTACK_ENGINE_ID}
+      - RESTACK_ENGINE_ADDRESS=${RESTACK_ENGINE_ADDRESS}
+      - RESTACK_TEMPORAL_ADDRESS=${RESTACK_TEMPORAL_ADDRESS}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - MEM0_API_KEY=${MEM0_API_KEY}
-      - DOCKER_HOST=tcp://docker-dind:2375
-      - RESTACK_ENGINE_ADDRESS=http://restack:6233
-      - RESTACK_TEMPORAL_ADDRESS=http://restack:7233
-      - RESTACK_ENGINE_ID = "local"
-      - RESTACK_ENGINE_API_KEY = None
+      - E2B_API_KEY=${E2B_API_KEY}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-AKIAIOSFODSAOHDSALJ/2882}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-wJalrXUtnFEMI/KDASKJDSADSADSAKJ03283208320}
+      - MINIO_USE_SSL=false
+      - BACKEND_URL=http://backend:8000
       - LLM_OUTPUT_DIR=/app/output
+    #for local development:
+    # environment:
+    #   - OPENAI_API_KEY=${OPENAI_API_KEY}
+    #   - MEM0_API_KEY=${MEM0_API_KEY}
+    #   - DOCKER_HOST=tcp://docker-dind:2375
+    #   - RESTACK_ENGINE_ADDRESS=http://restack:6233
+    #   - RESTACK_TEMPORAL_ADDRESS=http://restack:7233
+    #   - RESTACK_ENGINE_ID = "local"
+    #   - RESTACK_ENGINE_API_KEY = None
+    #   - LLM_OUTPUT_DIR=/app/output
     depends_on:
-      - restack-engine
-      - docker-dind
+      # - restack-engine  # Commented out since we're using cloud version
+      # - docker-dind    # Commented out since we're using E2B instead
       - backend
     command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
     networks:

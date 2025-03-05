@@ -13,6 +13,7 @@ class GenerateCodeInput {
   dirTree string? @description("Directory structure included for context.")
   preflightResult PreFlightOutput? @description("Output from a previous preflight step")
   testConditions string @description("Test conditions the code must meet")
+  // all changes made in validate_output are passed through here
   validationResult ValidateCodeOutput @description("Result from validator agent")
 }
 

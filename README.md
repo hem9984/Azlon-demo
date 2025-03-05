@@ -1,59 +1,70 @@
 # Autonomous Coding Workflow
-## TLDR 🔴
+
+# NEW WAY TO START SERVER
+```bash
+chmod +x start.sh
+./start.sh
 ```
-git clone https://github.com/hem9984/Azlon-demo.git
-cd Azlon-demo
-mkdir -p ./llm-output/input
-```
-* PRO TIP: Bookmark llm-output and input directories in your file explorer for easy access
-```
-echo "OPENAI_API_KEY=sk-..." > .env
-```
+Uses Tailscale funnel instead of static ip addresses.
+This way, any requests to https://muchnic.tail9dec88.ts.net/ go to your backend (port 8000).
+Requests to https://muchnic.tail9dec88.ts.net:8443/ go to MinIO (port 9000).
+
+## Backwards compatible way
+Backwards compatible way: mkdir -p ./llm-output/input
 ```
 docker compose up --build --remove-orphans
 ```
-* Frontend UI: http://localhost:8080/
-* Restack UI: http://localhost:5233/
-* Default output directory: ./Azlon-demo/llm-output
+
 
 #### To exit
 CTR + C then "docker compose down"
 
-### Usage in Frontend UI
-1. Enter your user_prompt and test_conditions. Optionally, add the files you wish it to start with in PATH_TO/llm-output/input
-2. Click "Run Workflow".
-3. Wait for your project code to complete! The final files will be saved to PATH_TO/llm-output/TIMESTAMP_OF_WORKFLOW on your local machine.
-* 🤖 It will recursively generate code, run the code, and fix the code if needed until it deems that your test case(s) are fulfilled. 
--------------------------------------------------------------
-## Overview
-This project sets up an autonomous coding workflow using Restack, LLMs, Docker-in-Docker for building and running Docker images, and a frontend React UI to interact with the system. Users can provide a user_prompt and test_conditions to generate code automatically, run it in a containerized environment, and validate the results. Users can also toggle an "advanced mode" to edit system prompts directly.
-
-## Prerequisites
-### Docker & Docker Compose:
-* Ensure Docker (>= 20.10) and Docker Compose (>= 1.29) are installed.
-* Install Docker | Install Docker Compose
 
 
-### The above commands will:
+## Development Workflow
 
-* Run Restack engine on http://localhost:5233 (and other ports as specified).
-* Run the backend on http://localhost:8000
-* Run the frontend on http://localhost:8080
-* Check the docker-compose.yml and frontend/Dockerfile for the final frontend port and mode.
+### Using the DevContainer (Recommended)
 
-# SETUP DONE! YOU ARE READY TO USE 🎊
+This project includes a DevContainer configuration that allows you to develop without needing to manually run docker-compose for each change. To use it:
 
-## Accessing the Application (open these two links in web browser windows):
+1. Install the [Remote - Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension in VS Code
+2. Open the project in VS Code
+3. Click the green button in the bottom-left corner of VS Code
+4. Select "Reopen in Container"
 
-#### Restack UI: http://localhost:5233/
-The Restack UI will show you running workflows and other details.
+This will build and start the container defined in `docker-compose.yml` for you automatically and set up the development environment.
 
-#### Frontend UI: http://localhost:8080/
-The React UI lets you enter your user_prompt and test_conditions. If you enable advanced mode in the GUI, you can edit system prompts as well.
+### Code Cleanup and Formatting
+
+To maintain code quality, we've added several tools for code cleanup and formatting:
+
+1. **Using the Makefile (in the container):**
+   ```bash
+   cd /app && make format
+   ```
+
+2. **Using the cleanup script (outside the container):**
+   ```bash
+   ./cleanup.sh
+   ```
+
+These commands will:
+- Remove unused imports with `autoflake`
+- Format code with `black`
+- Sort imports with `isort`
+
+### Running Tests
+
+To run the test suite:
+
+```bash
+# Inside the container or with poetry installed locally
+cd backend && make test
+```
 
 
 #### The application will:
 * Use your prompts to generate code and a Docker environment.
 * Build and run the generated code in a container.
 * Validate the output against test_conditions.
-* Display the results in the frontend UI and save the output files on your local machine in ./llm-output.
+* Display the results in the frontend UI and save the output files to Minio (S3 Bucket) and for backwords compatibility,on your local machine in ./llm-output.

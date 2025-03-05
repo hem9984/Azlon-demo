@@ -1,7 +1,7 @@
 # ./backend/src/prompts.py
 
 # are these always used instead of the baml since the defaults are not none?
-#i think this is just for frontend display. real prompts are in the baml
+# i think this is just for frontend display. real prompts are in the baml
 # Store defaults here
 # default_generate_code_prompt = """
 # You are an autonomous coding agent. If you need to create new files, provide complete code. Otherwise, generate replacement code snippets. Assume a git merge of your snippet with the current state of the codebase will be applied.
@@ -37,8 +37,8 @@ default_generate_code_prompt = """
     - The final code must pass the test conditions.
     """
 
-# default_validate_output_prompt = """You are an iteration of an autonomous coding assistant agent. 
-#     If you change any files, provide code snippet replacements to be used in a git merge. 
+# default_validate_output_prompt = """You are an iteration of an autonomous coding assistant agent.
+#     If you change any files, provide code snippet replacements to be used in a git merge.
 #     Append a brief explanation at the bottom of readme.md about what you tried.
 
 #     Please validate if the code meets all test_conditions and provide any necessary fixes."""
@@ -57,11 +57,13 @@ default_validate_output_prompt = """
 current_generate_code_prompt = default_generate_code_prompt
 current_validate_output_prompt = default_validate_output_prompt
 
+
 def get_prompts():
     return {
         "generate_code_prompt": current_generate_code_prompt,
-        "validate_output_prompt": current_validate_output_prompt
+        "validate_output_prompt": current_validate_output_prompt,
     }
+
 
 def set_prompts(generate_code_prompt: str, validate_output_prompt: str):
     global current_generate_code_prompt, current_validate_output_prompt
