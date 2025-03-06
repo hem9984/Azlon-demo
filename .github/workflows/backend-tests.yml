@@ -87,11 +87,11 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=3
-          --entrypoint sh
         volumes:
           - /tmp/data:/data
         # Start MinIO server
-        command: -c "mkdir -p /data && minio server /data --console-address ':9001'"
+        # running this does not work, maybe it is not allowed on github actions. command: ["sh", "-c", "mkdir -p /data && minio server /data --console-address ':9001'"]
+
 
     steps:
     - uses: actions/checkout@v3

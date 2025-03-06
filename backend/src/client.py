@@ -16,7 +16,6 @@ connection_options = CloudConnectionOptions(
     api_key=RESTACK_ENGINE_API_KEY,  # type: ignore
     address=RESTACK_TEMPORAL_ADDRESS,
     api_address=RESTACK_ENGINE_ADDRESS,
-    temporal_namespace="default",
 )
 
 # Initialize Restack with production cloud options

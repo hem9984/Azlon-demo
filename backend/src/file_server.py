@@ -13,7 +13,7 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger(__name__)
 
 
-def get_s3_client():
+def get_minio_client():
     """
     Create and return an S3 client configured to use MinIO
     """
@@ -52,7 +52,7 @@ def create_bucket_if_not_exists(bucket_name: str) -> bool:
     Returns:
         bool: True if created or already exists, False if failed
     """
-    s3_client = get_s3_client()
+    s3_client = get_minio_client()
 
     try:
         # Check if bucket exists
@@ -94,7 +94,7 @@ def upload_file(
     Returns:
         bool: True if file was uploaded, False otherwise
     """
-    s3_client = get_s3_client()
+    s3_client = get_minio_client()
 
     # Ensure bucket exists
     if not create_bucket_if_not_exists(bucket_name):
@@ -146,7 +146,7 @@ def download_file(
     Returns:
         bytes or bool: File content as bytes if file_path is None, otherwise True if successful
     """
-    s3_client = get_s3_client()
+    s3_client = get_minio_client()
 
     try:
         if file_path is None:
@@ -178,7 +178,7 @@ def list_files(bucket_name: str, prefix: str = "") -> List[Dict[str, Any]]:
     Returns:
         List[Dict]: List of objects with information
     """
-    s3_client = get_s3_client()
+    s3_client = get_minio_client()
 
     try:
         # Ensure bucket exists
@@ -217,7 +217,7 @@ def delete_file(bucket_name: str, object_name: str) -> bool:
     Returns:
         bool: True if file was deleted, False otherwise
     """
-    s3_client = get_s3_client()
+    s3_client = get_minio_client()
 
     try:
         s3_client.delete_object(Bucket=bucket_name, Key=object_name)
@@ -239,7 +239,7 @@ def delete_directory(bucket_name: str, prefix: str) -> bool:
     Returns:
         bool: True if all files were deleted, False otherwise
     """
-    s3_client = get_s3_client()
+    s3_client = get_minio_client()
 
     try:
         # Make sure prefix ends with a slash if it's meant to be a directory
@@ -276,7 +276,7 @@ def file_exists(bucket_name: str, object_name: str) -> bool:
     Returns:
         bool: True if file exists, False otherwise
     """
-    s3_client = get_s3_client()
+    s3_client = get_minio_client()
 
     try:
         s3_client.head_object(Bucket=bucket_name, Key=object_name)
@@ -362,7 +362,7 @@ def get_file_metadata(bucket_name: str, object_name: str) -> Dict[str, str]:
     Returns:
         Dict: Metadata of the file
     """
-    s3_client = get_s3_client()
+    s3_client = get_minio_client()
 
     try:
         response = s3_client.head_object(Bucket=bucket_name, Key=object_name)

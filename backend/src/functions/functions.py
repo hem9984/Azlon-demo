@@ -10,10 +10,10 @@ from src.baml_client.async_client import b
 from src.baml_client.types import (
     GenerateCodeInput,
     GenerateCodeOutput,
-    PreFlightOutput,
     ValidateCodeInput,
     ValidateCodeOutput,
 )
+from src.utils.file_handling import PreFlightOutput
 from src.memory_manager import add_memory, get_all_memories
 from src.prompts import get_prompts
 
@@ -21,6 +21,12 @@ from src.prompts import get_prompts
 @dataclass
 class RunCodeInput:
     repo_path: str
+    user_id: Optional[str] = None
+    run_id: Optional[str] = None
+
+
+@dataclass
+class PreFlightInput:
     user_id: Optional[str] = None
     run_id: Optional[str] = None
 
@@ -81,9 +87,9 @@ async def run_with_e2b(input: RunCodeInput) -> RunCodeOutput:
     bucket_name = "azlon-files"
 
     # Initialize E2B functions
-    from src.e2b_functions import E2BFunctions
+    from src.e2b_functions import E2BRunner
 
-    e2b = E2BFunctions()
+    e2b = E2BRunner()
 
     try:
         # Upload files from repo_path to MinIO, if they're not already there
@@ -110,7 +116,7 @@ async def run_with_e2b(input: RunCodeInput) -> RunCodeOutput:
             log.info(f"Uploaded files to MinIO bucket {bucket_name} with prefix {user_id}/{run_id}")
 
         # Run the E2B container build and execution process
-        result = await e2b.run_docker_container(user_id, run_id, bucket_name)
+        result = e2b.run_docker_container(user_id, run_id, bucket_name)
 
         if result["status"] == "error":
             log.error(f"E2B execution failed: {result['output']}")
@@ -221,7 +227,7 @@ async def validate_output(input: ValidateCodeInput) -> ValidateCodeOutput:
         error_message = f"Validation error: {str(e)}"
         with open(os.path.join(user_output_dir, "error.log"), "a") as f:
             f.write(f"{time.time()}: {error_message}\n")
-        return ValidateCodeOutput(feedback=error_message, nextIteration=False)
+        return ValidateCodeOutput(result=False, suspectedFiles=[], unsuspectedFiles=[])
 
     return result
 

@@ -7,7 +7,7 @@ import re
 import shutil
 import subprocess
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union, BinaryIO
 
 # Import E2B for sandbox execution
 try:
@@ -17,7 +17,26 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-from src.baml_client.types import PreFlightOutput
+# Re-export file_server functions
+from src.file_server import (
+    create_bucket_if_not_exists,
+    upload_file,
+    download_file,
+    list_files,
+    generate_directory_tree,
+    delete_file,
+    delete_directory,
+    file_exists,
+    get_file_metadata
+)
+
+# Define PreFlightOutput locally to avoid BAML dependency issues
+class PreFlightOutput:
+    def __init__(self, result: bool = False, errors: Optional[List[str]] = None, dirTree: str = "", runOutput: str = ""):
+        self.result = result
+        self.errors = errors or []
+        self.dirTree = dirTree
+        self.runOutput = runOutput
 
 # ---------------------------------------------------------------------
 # GitManager
@@ -292,10 +311,22 @@ class CodeInclusionManager:
 
 
 class PreFlightManager:
-    def __init__(self, user_id: Optional[str] = None, run_id: Optional[str] = None):
+    def __init__(self, user_id: Optional[str] = None, run_id: Optional[str] = None, bucket_name: Optional[str] = None):
         self.user_id = user_id or "anonymous"
         self.run_id = run_id or str(int(time.time() * 1000))
-        self.bucket_name = "azlon-files"
+        self.bucket_name = bucket_name or "azlon-files"
+        
+        # Create bucket if it doesn't exist
+        create_bucket_if_not_exists(self.bucket_name)
+        
+    @property
+    def base_prefix(self) -> str:
+        """Get the base prefix for S3 objects"""
+        return f"{self.user_id}/{self.run_id}/"
+        
+    def get_object_key(self, file_path: str) -> str:
+        """Get the full S3 object key for a given file path"""
+        return f"{self.user_id}/{self.run_id}/{file_path}"
 
     def has_input_files(self) -> bool:
         """
@@ -314,8 +345,6 @@ class PreFlightManager:
         # Then check MinIO
         minio_has_files = False
         try:
-            from src.file_server import list_files
-
             files = list_files(self.bucket_name, f"input/{self.user_id}/")
             if files:
                 minio_has_files = True
@@ -323,6 +352,77 @@ class PreFlightManager:
             logger.error(f"Error checking MinIO for input files: {e}")
 
         return local_has_files or minio_has_files
+        
+    def collect_and_upload_files(self, local_dir: str) -> List[Dict[str, Any]]:
+        """
+        Collect files from a local directory and upload them to MinIO
+        
+        Args:
+            local_dir: Local directory to collect files from
+            
+        Returns:
+            List of information about the uploaded files
+        """
+        uploaded_files = []
+        
+        # Walk the directory and collect files
+        for root, _, files in os.walk(local_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                
+                # Get the relative path for S3 key
+                rel_path = os.path.relpath(file_path, local_dir)
+                object_key = self.get_object_key(rel_path)
+                
+                # Upload the file to MinIO
+                if upload_file(file_path, self.bucket_name, object_key):
+                    uploaded_files.append({
+                        "local_path": file_path,
+                        "key": object_key,
+                        "size": os.path.getsize(file_path),
+                        "last_modified": time.time()
+                    })
+                    
+        return uploaded_files
+        
+    def list_files(self, prefix: str = "") -> List[Dict[str, Any]]:
+        """
+        List files in MinIO with the user/run prefix
+        
+        Args:
+            prefix: Additional prefix to filter by (after user/run)
+            
+        Returns:
+            List of file information dictionaries
+        """
+        full_prefix = self.base_prefix
+        if prefix:
+            full_prefix = f"{full_prefix}{prefix}"
+            
+        return list_files(self.bucket_name, full_prefix)
+        
+    def download_file(self, object_key: str, local_path: Optional[str] = None) -> Union[bytes, bool]:
+        """
+        Download a file from MinIO
+        
+        Args:
+            object_key: S3 object key (relative to user/run prefix)
+            local_path: Optional file path to save to. If None, returns the content as bytes.
+            
+        Returns:
+            bytes or bool: File content as bytes if local_path is None, otherwise True if successful
+        """
+        full_key = self.get_object_key(object_key) if not object_key.startswith(self.base_prefix) else object_key
+        return download_file(self.bucket_name, full_key, local_path)
+        
+    def generate_directory_tree(self) -> str:
+        """
+        Generate a tree-like representation of files in MinIO for the current user/run prefix
+        
+        Returns:
+            str: Tree-like representation of files
+        """
+        return generate_directory_tree(self.bucket_name, self.base_prefix)
 
     def perform_preflight_merge_and_run(self) -> "PreFlightOutput":
         """
@@ -370,19 +470,15 @@ class PreFlightManager:
         # If no Dockerfile, skip building
         if not user_json["dockerfile"].strip():
             return PreFlightOutput(
-                dirTree=tree_str, runOutput="No Dockerfile found. Preflight was skipped."
+                result=True, dirTree=tree_str, runOutput="No Dockerfile found. Preflight was skipped."
             )
 
         # Run docker container using E2B
         try:
-            import asyncio
+            from src.e2b_functions import E2BRunner
 
-            from src.e2b_functions import E2BFunctions
-
-            e2b = E2BFunctions()
-            result = asyncio.run(
-                e2b.run_docker_container(self.user_id, self.run_id, self.bucket_name)
-            )
+            e2b = E2BRunner()
+            result = e2b.run_docker_container(self.user_id, self.run_id, self.bucket_name)
 
             # Update the tree after execution
             try:
@@ -392,12 +488,13 @@ class PreFlightManager:
             except Exception:
                 pass
 
-            return PreFlightOutput(dirTree=tree_str, runOutput=result["output"])
+            success = result["status"] == "success"
+            return PreFlightOutput(result=success, dirTree=tree_str, runOutput=result["output"])
         except Exception as e:
             logger.error(f"Error running preflight with E2B: {str(e)}")
-            return PreFlightOutput(dirTree=tree_str, runOutput=f"Preflight exception: {e}")
+            return PreFlightOutput(result=False, dirTree=tree_str, runOutput=f"Preflight exception: {e}")
 
-    def _collect_input_files(self) -> Dict[str, Any]:
+    def _collect_input_files(self, run_folder: str) -> Dict[str, Any]:
         """
         Gather files from /input directory (locally) and/or from MinIO input/ prefix.
         Returns a dictionary with "dockerfile" and "files" keys.

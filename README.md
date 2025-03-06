@@ -11,9 +11,8 @@ Requests to https://muchnic.tail9dec88.ts.net:8443/ go to MinIO (port 9000).
 
 ## Backwards compatible way
 Backwards compatible way: mkdir -p ./llm-output/input
-```
+
 docker compose up --build --remove-orphans
-```
 
 
 #### To exit
@@ -22,6 +21,18 @@ CTR + C then "docker compose down"
 
 
 ## Development Workflow
+when server is up, can run:
+```bash
+cd backend
+poetry run schedule
+```
+To run a simple example user input as if it was coming from the production frontend.
+
+There is now a Makefile for running common commands. Run `make help` for a list of commands.
+
+cleanup.sh just gets rid of unused imports.
+
+There are also now extensive pytests
 
 ### Using the DevContainer (Recommended)
 

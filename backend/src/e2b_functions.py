@@ -5,7 +5,9 @@ import os
 from typing import Any, Dict, List, Optional
 
 from e2b import Sandbox
-from restack_ai.utils import log
+import logging
+
+log = logging.getLogger(__name__)
 
 from src.file_server import (
     create_bucket_if_not_exists,
@@ -16,14 +18,62 @@ from src.file_server import (
 )
 
 
-class E2BFunctions:
+class E2BRunner:
     def __init__(self) -> None:
         # This template allows us to build and run docker containers inside E2B sandbox
         self.template = "e2b-with-docker"
         self.api_key = os.environ.get("E2B_API_KEY")
         # We'll create a new sandbox for each run
+        
+    def init_sandbox(self) -> Sandbox:
+        """
+        Initialize a new E2B sandbox
+        
+        Returns:
+            Sandbox: E2B Sandbox instance
+        """
+        sandbox = Sandbox(template=self.template, api_key=self.api_key)
+        return sandbox
+        
+    def install_packages(self, sandbox: Sandbox, packages: List[str]) -> bool:
+        """
+        Install Python packages in the sandbox
+        
+        Args:
+            sandbox: E2B Sandbox instance
+            packages: List of package names to install
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            package_str = " ".join(packages)
+            result = sandbox.commands.run(f"pip install {package_str}")
+            return result.exit_code == 0
+        except Exception as e:
+            log.error(f"Failed to install packages {packages}: {e}")
+            return False
+            
+    def upload_file_to_e2b(self, sandbox: Sandbox, content: bytes, file_path: str) -> bool:
+        """
+        Upload a file to the E2B sandbox
+        
+        Args:
+            sandbox: E2B Sandbox instance
+            content: File content as bytes
+            file_path: Target file path in E2B
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            sandbox.files.write(file_path, content)
+            return True
+        except Exception as e:
+            log.error(f"Failed to upload file to {file_path}: {e}")
+            return False
 
-    async def run_docker_container(
+    def run_docker_container(
         self, user_id: str, run_id: str, bucket_name: str = "azlon-files"
     ) -> Dict[str, Any]:
         """
@@ -65,10 +115,10 @@ class E2BFunctions:
                 }
 
             # Download files from MinIO and upload to E2B
-            await self._upload_files_to_e2b(sbx, bucket_name, files)
+            self._upload_files_to_e2b(sbx, bucket_name, files)
 
             # Check if Dockerfile exists
-            dockerfile_exists = await self._file_exists_in_e2b(sbx, "/app/Dockerfile")
+            dockerfile_exists = self._file_exists_in_e2b(sbx, "/app/Dockerfile")
             if not dockerfile_exists:
                 log.warning(f"No Dockerfile found for {prefix}")
                 sbx.kill()
@@ -79,12 +129,12 @@ class E2BFunctions:
                 }
 
             # Run ls command to see the files
-            ls_result = await sbx.commands.run("ls -la /app")
+            ls_result = sbx.commands.run("ls -la /app")
             log.info(f"Files in E2B sandbox: {ls_result.stdout}")
 
             # Build Docker container
             log.info("Building Docker container in E2B sandbox")
-            build_result = await sbx.commands.run("cd /app && docker build -t app-container .")
+            build_result = sbx.commands.run("cd /app && docker build -t app-container .")
 
             if build_result.exit_code != 0:
                 log.error(f"Docker build failed: {build_result.stderr}")
@@ -97,10 +147,10 @@ class E2BFunctions:
 
             # Run Docker container
             log.info("Running Docker container in E2B sandbox")
-            run_result = await sbx.commands.run("cd /app && docker run --rm app-container")
+            run_result = sbx.commands.run("cd /app && docker run --rm app-container")
 
             # Get the list of files after container execution
-            post_run_files = await self._list_files_in_e2b(sbx, "/app")
+            post_run_files = self._list_files_in_e2b(sbx, "/app")
 
             # Find modified or new files
             modified_files = []
@@ -110,7 +160,7 @@ class E2BFunctions:
                     continue
 
                 # Download the file from E2B
-                content = await self._download_file_from_e2b(sbx, file_path)
+                content = self._download_file_from_e2b(sbx, file_path)
                 if content:
                     # Generate relative path for S3
                     rel_path = file_path.replace("/app/", "")
@@ -121,7 +171,7 @@ class E2BFunctions:
                     modified_files.append(rel_path)
 
             # Generate directory tree
-            tree = generate_directory_tree(bucket_name, prefix)
+            directory_tree = generate_directory_tree(bucket_name, prefix)
 
             # Close the sandbox
             sbx.kill()
@@ -130,7 +180,7 @@ class E2BFunctions:
                 "output": run_result.stdout if run_result.exit_code == 0 else run_result.stderr,
                 "status": "success" if run_result.exit_code == 0 else "error",
                 "modified_files": modified_files,
-                "directory_tree": tree,
+                "directory_tree": directory_tree,
             }
 
         except Exception as e:
@@ -145,7 +195,7 @@ class E2BFunctions:
                 "modified_files": [],
             }
 
-    async def _upload_files_to_e2b(
+    def _upload_files_to_e2b(
         self, sbx: Sandbox, bucket_name: str, files: List[Dict[str, Any]]
     ) -> None:
         """
@@ -157,7 +207,7 @@ class E2BFunctions:
             files: List of files from MinIO
         """
         # Create /app directory in E2B
-        await sbx.commands.run("mkdir -p /app")
+        sbx.commands.run("mkdir -p /app")
 
         for file_info in files:
             key = file_info["key"]
@@ -180,13 +230,13 @@ class E2BFunctions:
             # Create directories if necessary
             dir_path = os.path.dirname(e2b_path)
             if dir_path != "/app":
-                await sbx.commands.run(f"mkdir -p {dir_path}")
+                sbx.commands.run(f"mkdir -p {dir_path}")
 
             # Upload file to E2B
-            await sbx.files.write(e2b_path, content)
+            sbx.files.write(e2b_path, content)
             log.debug(f"Uploaded {key} to E2B at {e2b_path}")
 
-    async def _list_files_in_e2b(self, sbx: Sandbox, directory: str) -> List[str]:
+    def _list_files_in_e2b(self, sbx: Sandbox, directory: str) -> List[str]:
         """
         List all files in an E2B directory recursively
 
@@ -197,7 +247,7 @@ class E2BFunctions:
         Returns:
             List[str]: List of file paths
         """
-        result = await sbx.commands.run(f"find {directory} -type f | sort")
+        result = sbx.commands.run(f"find {directory} -type f | sort")
         if result.exit_code != 0:
             log.error(f"Failed to list files in E2B: {result.stderr}")
             return []
@@ -205,7 +255,7 @@ class E2BFunctions:
         files = result.stdout.strip().split("\n")
         return [f for f in files if f]  # Filter out empty lines
 
-    async def _download_file_from_e2b(self, sbx: Sandbox, file_path: str) -> Optional[bytes]:
+    def _download_file_from_e2b(self, sbx: Sandbox, file_path: str) -> Optional[bytes]:
         """
         Download a file from E2B
 
@@ -217,13 +267,37 @@ class E2BFunctions:
             Optional[bytes]: File content or None if failed
         """
         try:
-            content = await sbx.files.read(file_path)
+            content = sbx.files.read(file_path)
+            # Convert string to bytes if needed
+            if isinstance(content, str):
+                return content.encode('utf-8')
+            return content
+        except Exception as e:
+            log.error(f"Failed to download file {file_path} from E2B: {e}")
+            return None
+            
+    def download_file_from_e2b(self, sandbox: Sandbox, file_path: str) -> Optional[bytes]:
+        """
+        Download a file from E2B
+
+        Args:
+            sandbox: E2B Sandbox instance
+            file_path: Path to file in E2B
+
+        Returns:
+            Optional[bytes]: File content or None if failed
+        """
+        try:
+            content = sandbox.files.read(file_path)
+            # Convert string to bytes if needed
+            if isinstance(content, str):
+                return content.encode('utf-8')
             return content
         except Exception as e:
             log.error(f"Failed to download file {file_path} from E2B: {e}")
             return None
 
-    async def _file_exists_in_e2b(self, sbx: Sandbox, file_path: str) -> bool:
+    def _file_exists_in_e2b(self, sbx: Sandbox, file_path: str) -> bool:
         """
         Check if a file exists in E2B
 
@@ -234,12 +308,84 @@ class E2BFunctions:
         Returns:
             bool: True if file exists, False otherwise
         """
-        result = await sbx.commands.run(
+        result = sbx.commands.run(
             f"test -f {file_path} && echo 'exists' || echo 'not exists'"
         )
         return result.stdout.strip() == "exists"
+        
+    def file_exists_in_e2b(self, sandbox: Sandbox, file_path: str) -> bool:
+        """
+        Public method to check if a file exists in E2B
 
-    async def generate_directory_tree(self, sbx: Sandbox, directory: str) -> str:
+        Args:
+            sandbox: E2B Sandbox instance
+            file_path: Path to file in E2B
+
+        Returns:
+            bool: True if file exists, False otherwise
+        """
+        try:
+            result = self._file_exists_in_e2b(sandbox, file_path)
+            return result
+        except Exception as e:
+            log.error(f"Failed to check if file {file_path} exists in E2B: {e}")
+            return False
+
+    def run_command_in_e2b(self, sandbox: Sandbox, command: str) -> Any:
+        """
+        Run a command in the E2B sandbox
+
+        Args:
+            sandbox: E2B Sandbox instance
+            command: Command to run
+
+        Returns:
+            Any: Command result object with stdout, stderr, and exit_code
+        """
+        try:
+            result = sandbox.commands.run(command)
+            return result
+        except Exception as e:
+            log.error(f"Failed to run command {command} in E2B: {e}")
+            # Create a simple result object with the expected properties
+            class ErrorResult:
+                def __init__(self):
+                    self.stdout = ""
+                    self.stderr = f"Error: {str(e)}"
+                    self.exit_code = 1
+            return ErrorResult()
+            
+    def generate_directory_tree(self, sandbox: Sandbox, directory: str) -> str:
+        """
+        Generate a tree-like representation of files in an E2B directory
+
+        Args:
+            sandbox: E2B Sandbox instance
+            directory: Directory path in E2B
+
+        Returns:
+            str: Tree-like representation of files
+        """
+        try:
+            # Use the find command to get a list of files and the tree command to format it
+            # Install tree if it's not already installed
+            sandbox.commands.run("apt-get update && apt-get install -y tree || true")
+            result = sandbox.commands.run(f"cd {directory} && tree -a")
+            if result.exit_code != 0:
+                # Fallback if tree command fails
+                result = sandbox.commands.run(f"find {directory} -type f | sort")
+                if result.exit_code != 0:
+                    return f"Error generating directory tree: {result.stderr}"
+                
+                files = result.stdout.strip().split("\n")
+                return "\n".join(files)
+                
+            return result.stdout
+        except Exception as e:
+            log.error(f"Failed to generate directory tree for {directory}: {e}")
+            return f"Error generating directory tree: {str(e)}"
+    
+    def _generate_directory_tree(self, sbx: Sandbox, directory: str) -> str:
         """
         Generate a tree-like representation of files in an E2B directory
 
@@ -251,7 +397,7 @@ class E2BFunctions:
             str: Tree-like representation of files
         """
         try:
-            result = await sbx.commands.run(f"find {directory} -type f | sort")
+            result = sbx.commands.run(f"find {directory} -type f | sort")
             if result.exit_code != 0:
                 return f"Error generating directory tree: {result.stderr}"
 

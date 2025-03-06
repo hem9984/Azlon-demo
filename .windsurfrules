@@ -1,0 +1,2 @@
+check off boxes in plan.md if the issue has been verified to be fixed.
+keep fixing and running pytests until the linter is indicating no errors.
