@@ -37,8 +37,9 @@ This document outlines the steps needed to resolve the current issues in the cod
 
 After resolving the issues:
 
-- [ ] Run `start.sh` to expose the backend server to the frontend
-- [ ] Run `cd backend && poetry run schedule` to emulate the same process as if the JSON came from the frontend
+- [x] Run tests for all components (all 25 tests now passing)
+- [ ] Run `make start-server` to build and start Docker containers with Tailscale and expose the backend server to the frontend
+- [ ] Run `poetry run schedule` to emulate the same process as if the JSON came from the frontend
 
 ## Additional Tasks
 

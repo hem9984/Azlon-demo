@@ -67,7 +67,7 @@ class TestFileServer:
 
         # Assertions
         minio_client_mock.upload_file.assert_called_once_with(
-            str(file_path), "test-bucket", "test-key"
+            str(file_path), "test-bucket", "test-key", ExtraArgs={}
         )
 
     def test_upload_file_from_buffer(self, minio_client_mock):

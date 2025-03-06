@@ -55,25 +55,22 @@ def create_bucket_if_not_exists(bucket_name: str) -> bool:
     s3_client = get_minio_client()
 
     try:
-        # Check if bucket exists
-        s3_client.head_bucket(Bucket=bucket_name)
-        logger.info(f"Bucket {bucket_name} already exists")
+        # Check if bucket exists by listing all buckets
+        response = s3_client.list_buckets()
+        buckets = response.get('Buckets', [])
+        bucket_exists = any(bucket['Name'] == bucket_name for bucket in buckets)
+        
+        if bucket_exists:
+            logger.info(f"Bucket {bucket_name} already exists")
+            return True
+            
+        # Bucket doesn't exist, create it
+        s3_client.create_bucket(Bucket=bucket_name)
+        logger.info(f"Created bucket: {bucket_name}")
         return True
     except ClientError as e:
-        # If a 404 error, then the bucket does not exist
-        error_code = e.response.get("Error", {}).get("Code")
-        if error_code == "404" or error_code == "NoSuchBucket":
-            # Create the bucket
-            try:
-                s3_client.create_bucket(Bucket=bucket_name)
-                logger.info(f"Created bucket: {bucket_name}")
-                return True
-            except ClientError as ce:
-                logger.error(f"Failed to create bucket {bucket_name}: {ce}")
-                return False
-        else:
-            logger.error(f"Error checking bucket {bucket_name}: {e}")
-            return False
+        logger.error(f"Error creating/checking bucket {bucket_name}: {e}")
+        return False
 
 
 def upload_file(
@@ -195,8 +192,8 @@ def list_files(bucket_name: str, prefix: str = "") -> List[Dict[str, Any]]:
                 {
                     "key": obj["Key"],
                     "size": obj["Size"],
-                    "modified": obj["LastModified"].isoformat(),
-                    "etag": obj["ETag"].strip('"'),
+                    "modified": obj["LastModified"].isoformat() if hasattr(obj["LastModified"], "isoformat") else str(obj["LastModified"]),
+                    "etag": obj.get("ETag", "").strip('"'),
                 }
             )
 

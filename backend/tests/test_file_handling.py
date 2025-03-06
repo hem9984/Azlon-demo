@@ -47,8 +47,9 @@ class TestPreFlightManager:
             }
 
     @pytest.fixture
-    def preflight_manager(self):
+    def preflight_manager(self, file_server_mock):
         """Create an instance of PreFlightManager with test parameters."""
+        # Create the manager AFTER the mocks are in place
         manager = PreFlightManager(
             user_id="test-user", run_id="test-run", bucket_name="test-bucket"
         )
@@ -110,7 +111,7 @@ class TestPreFlightManager:
 
         # Assertions
         file_server_mock["download_file"].assert_called_once_with(
-            "test-bucket", "test-user/test-run/file.txt"
+            "test-bucket", "test-user/test-run/file.txt", None
         )
         assert content == b"test content"
 
