@@ -84,10 +84,17 @@ services:
       - MEM0_API_KEY=${MEM0_API_KEY}
       - E2B_API_KEY=${E2B_API_KEY}
       - MINIO_ENDPOINT=minio:9000
+      - MINIO_EXTERNAL_ENDPOINT=${MINIO_EXTERNAL_ENDPOINT:-https://muchnic.tail9dec88.ts.net:8443}
+      - USE_EXTERNAL_MINIO=${USE_EXTERNAL_MINIO:-true}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-AKIAIOSFODSAOHDSALJ/2882}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-wJalrXUtnFEMI/KDASKJDSADSADSAKJ03283208320}
-      - MINIO_USE_SSL=false
+      - MINIO_USE_SSL=${MINIO_USE_SSL:-false}
       - BACKEND_URL=http://backend:8000
+      - EXTERNAL_BACKEND_URL=${EXTERNAL_BACKEND_URL:-https://muchnic.tail9dec88.ts.net}
+      - RESTACK_ENGINE_ID=${RESTACK_ENGINE_ID}
+      - RESTACK_ENGINE_API_KEY=${RESTACK_ENGINE_API_KEY}
+      - RESTACK_ENGINE_ADDRESS=${RESTACK_ENGINE_ADDRESS}
+      - RESTACK_ENGINE_API_ADDRESS=${RESTACK_ENGINE_API_ADDRESS}
       #  NOW ONLY NEED ONE CONTAINER SINCE RUNNING CODE IS DELEGATED TO RESTACK CLOUD
       # - DOCKER_HOST=tcp://docker-dind:2375
       # - RESTACK_ENGINE_ADDRESS=http://restack:6233
@@ -105,41 +112,43 @@ services:
     ports:
       - "8000:8000"
 
-  worker:
-    build: ./backend
-    environment:
-      - RESTACK_ENGINE_API_KEY=${RESTACK_ENGINE_API_KEY}
-      - RESTACK_ENGINE_ID=${RESTACK_ENGINE_ID}
-      - RESTACK_ENGINE_ADDRESS=${RESTACK_ENGINE_ADDRESS}
-      - RESTACK_TEMPORAL_ADDRESS=${RESTACK_TEMPORAL_ADDRESS}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - MEM0_API_KEY=${MEM0_API_KEY}
-      - E2B_API_KEY=${E2B_API_KEY}
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-AKIAIOSFODSAOHDSALJ/2882}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-wJalrXUtnFEMI/KDASKJDSADSADSAKJ03283208320}
-      - MINIO_USE_SSL=false
-      - BACKEND_URL=http://backend:8000
-      - LLM_OUTPUT_DIR=/app/output
-    #for local development:
-    # environment:
-    #   - OPENAI_API_KEY=${OPENAI_API_KEY}
-    #   - MEM0_API_KEY=${MEM0_API_KEY}
-    #   - DOCKER_HOST=tcp://docker-dind:2375
-    #   - RESTACK_ENGINE_ADDRESS=http://restack:6233
-    #   - RESTACK_TEMPORAL_ADDRESS=http://restack:7233
-    #   - RESTACK_ENGINE_ID = "local"
-    #   - RESTACK_ENGINE_API_KEY = None
-    #   - LLM_OUTPUT_DIR=/app/output
-    depends_on:
-      # - restack-engine  # Commented out since we're using cloud version
-      # - docker-dind    # Commented out since we're using E2B instead
-      - backend
-    command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
-    networks:
-      - restack-network
-    volumes:
-      - ./llm-output:/app/output:rw
+  # Worker service is no longer needed when using Restack cloud
+  # The backend container now handles all communication with Restack cloud APIs
+  # worker:
+  #   build: ./backend
+  #   environment:
+  #     - RESTACK_ENGINE_API_KEY=${RESTACK_ENGINE_API_KEY}
+  #     - RESTACK_ENGINE_ID=${RESTACK_ENGINE_ID}
+  #     - RESTACK_ENGINE_ADDRESS=${RESTACK_ENGINE_ADDRESS}
+  #     - RESTACK_TEMPORAL_ADDRESS=${RESTACK_TEMPORAL_ADDRESS}
+  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #     - MEM0_API_KEY=${MEM0_API_KEY}
+  #     - E2B_API_KEY=${E2B_API_KEY}
+  #     - MINIO_ENDPOINT=minio:9000
+  #     - MINIO_ROOT_USER=${MINIO_ROOT_USER:-AKIAIOSFODSAOHDSALJ/2882}
+  #     - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-wJalrXUtnFEMI/KDASKJDSADSADSAKJ03283208320}
+  #     - MINIO_USE_SSL=false
+  #     - BACKEND_URL=http://backend:8000
+  #     - LLM_OUTPUT_DIR=/app/output
+  #   #for local development:
+  #   # environment:
+  #   #   - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #   #   - MEM0_API_KEY=${MEM0_API_KEY}
+  #   #   - DOCKER_HOST=tcp://docker-dind:2375
+  #   #   - RESTACK_ENGINE_ADDRESS=http://restack:6233
+  #   #   - RESTACK_TEMPORAL_ADDRESS=http://restack:7233
+  #   #   - RESTACK_ENGINE_ID = "local"
+  #   #   - RESTACK_ENGINE_API_KEY = None
+  #   #   - LLM_OUTPUT_DIR=/app/output
+  #   depends_on:
+  #     # - restack-engine  # Commented out since we're using cloud version
+  #     # - docker-dind    # Commented out since we're using E2B instead
+  #     - backend
+  #   command: ["sh", "-c", "sleep 5 && poetry run python -m src.services"]
+  #   networks:
+  #     - restack-network
+  #   volumes:
+  #     - ./llm-output:/app/output:rw
 
   frontend:
     build: ./frontend

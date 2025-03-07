@@ -22,7 +22,7 @@ class TestE2BRunner:
             sandbox_instance = Mock()
             mock_sandbox_class.return_value = sandbox_instance
             yield sandbox_instance
-            
+
     @pytest.fixture
     def sandbox_class_mock(self):
         """Mock for the Sandbox class itself."""
@@ -46,9 +46,11 @@ class TestE2BRunner:
 
             # Assertions
             assert sandbox is not None
-            
+
             # Check that the Sandbox constructor was called once with correct arguments
-            sandbox_class_mock.assert_called_once_with(template=runner.template, api_key=runner.api_key)
+            sandbox_class_mock.assert_called_once_with(
+                template=runner.template, api_key=runner.api_key
+            )
 
     def test_install_packages(self, runner, e2b_mock):
         """Test installing packages in the sandbox."""
@@ -178,11 +180,11 @@ class TestE2BRunner:
         # Setup mock response for both commands
         install_result = Mock()
         install_result.exit_code = 0
-        
+
         tree_result = Mock()
         tree_result.exit_code = 0
         tree_result.stdout = ".\n├── file1.txt\n└── dir1\n    └── file2.txt"
-        
+
         # Configure the mock to return different values for each call
         e2b_mock.commands.run.side_effect = [install_result, tree_result]
 

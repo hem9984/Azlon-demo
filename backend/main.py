@@ -11,7 +11,7 @@ import glob
 from pathlib import Path
 
 from src.client import client
-from src.prompts import get_prompts, set_prompts
+from src.prompts import get_prompts
 from restack_ai import Restack
 
 app = FastAPI()
@@ -25,8 +25,7 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-# Global variable to store the current user ID
-current_user_id = None
+# No global user ID - each request should include its own user ID via header or payload
 
 class UserInput(BaseModel):
     user_prompt: str
@@ -37,23 +36,16 @@ class PromptsInput(BaseModel):
     generate_code_prompt: str
     validate_output_prompt: str
 
-# Middleware to extract user ID from headers
+# Log incoming requests with user ID if available
 @app.middleware("http")
-async def extract_user_id(request: Request, call_next):
-    global current_user_id
+async def log_request_user_id(request: Request, call_next):
     # Get user ID from header
     user_id = request.headers.get("X-User-ID")
     if user_id:
-        current_user_id = user_id
-        print(f"Current user ID set to: {current_user_id}")
+        print(f"Processing request for user ID: {user_id}")
     
     response = await call_next(request)
     return response
-
-@app.get("/user_id")
-def get_current_user_id():
-    """Get the currently stored user ID"""
-    return {"user_id": current_user_id}
 
 @app.get("/prompts")
 def fetch_prompts(x_user_id: Optional[str] = Header(None)):
@@ -63,45 +55,44 @@ def fetch_prompts(x_user_id: Optional[str] = Header(None)):
         print(f"Fetching prompts for user: {x_user_id}")
     return get_prompts()
 
-@app.post("/prompts")
-def update_prompts(prompts: PromptsInput, x_user_id: Optional[str] = Header(None)):
-    """Update the prompts"""
-    # Log user ID
-    if x_user_id:
-        print(f"Updating prompts for user: {x_user_id}")
-    set_prompts(prompts.generate_code_prompt, prompts.validate_output_prompt)
-    return {"status": "updated"}
+# @app.post("/prompts")
+# def update_prompts(prompts: PromptsInput, x_user_id: Optional[str] = Header(None)):
+#     """Update the prompts"""
+#     # Log user ID
+#     if x_user_id:
+#         print(f"Updating prompts for user: {x_user_id}")
+#     set_prompts(prompts.generate_code_prompt, prompts.validate_output_prompt)
+#     return {"status": "updated"}
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"error": "Internal Server Error."},
-        headers={"Access-Control-Allow-Origin": "http://localhost:8080"},
+        headers={"Access-Control-Allow-Origin": "*"},
     )
 
 @app.post("/run_workflow")
 async def run_workflow(params: UserInput, x_user_id: Optional[str] = Header(None)):
     """Run the workflow with user ID"""
-    # Use user ID from header or body
-    user_id = x_user_id or params.user_id or current_user_id
+    # Use user ID from header or body, with fallback to 'anonymous'
+    user_id = str(x_user_id or params.user_id or "anonymous")
     
-    if user_id:
-        print(f"Running workflow for user: {user_id}")
+    print(f"Running workflow for user: {user_id}")
     
     try:
-        # Include user ID in workflow ID if available
-        user_prefix = f"user-{user_id}-" if user_id else ""
-        workflow_id = f"{user_prefix}{int(time.time() * 1000)}"
+        # Generate a unique workflow ID with user prefix
+        timestamp = int(time.time() * 1000)
+        workflow_id = f"user-{user_id}-{timestamp}"
         
-        # Include user ID in workflow input
+        # Prepare workflow input with user_id included
         workflow_input = params.model_dump()
-        workflow_input["user_id"] = user_id  # Ensure user_id is in the input
+        workflow_input["user_id"] = user_id  # Ensure user_id is passed to workflow
         
         runId = await client.schedule_workflow(
             workflow_name="AutonomousCodingWorkflow",
             workflow_id=workflow_id,
-            input=workflow_input # type: ignore
+            input=workflow_input
         )
         result = await client.get_workflow_result(workflow_id=workflow_id, run_id=runId)
         return {"workflow_id": workflow_id, "result": result, "user_id": user_id}
@@ -113,8 +104,8 @@ async def run_workflow(params: UserInput, x_user_id: Optional[str] = Header(None
 @app.get("/output_dirs", response_model=List[str])
 def list_output_dirs(x_user_id: Optional[str] = Header(None), user_id: Optional[str] = None):
     """List all final output directories, filtered by user ID if provided"""
-    # Use user ID from header, query param, or global
-    effective_user_id = x_user_id or user_id or current_user_id
+    # Use user ID from header or query param, defaulting to 'anonymous'
+    effective_user_id = x_user_id or user_id or "anonymous"
     
     if effective_user_id:
         print(f"Listing output directories for user: {effective_user_id}")
@@ -187,8 +178,8 @@ def get_output_file(
     user_id: Optional[str] = None
 ):
     """Get a specific file from an output directory"""
-    # Use user ID from header, query param, or global
-    effective_user_id = x_user_id or user_id or current_user_id
+    # Use user ID from header or query param, defaulting to 'anonymous'
+    effective_user_id = x_user_id or user_id or "anonymous"
     
     if effective_user_id:
         print(f"Fetching file for user: {effective_user_id}, directory: {dir_name}, file: {file_path}")

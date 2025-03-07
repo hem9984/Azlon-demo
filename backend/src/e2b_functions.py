@@ -1,11 +1,11 @@
 # ./backend/src/e2b_functions.py
 
 import io
+import logging
 import os
 from typing import Any, Dict, List, Optional
 
 from e2b import Sandbox
-import logging
 
 log = logging.getLogger(__name__)
 
@@ -24,25 +24,25 @@ class E2BRunner:
         self.template = "e2b-with-docker"
         self.api_key = os.environ.get("E2B_API_KEY")
         # We'll create a new sandbox for each run
-        
+
     def init_sandbox(self) -> Sandbox:
         """
         Initialize a new E2B sandbox
-        
+
         Returns:
             Sandbox: E2B Sandbox instance
         """
         sandbox = Sandbox(template=self.template, api_key=self.api_key)
         return sandbox
-        
+
     def install_packages(self, sandbox: Sandbox, packages: List[str]) -> bool:
         """
         Install Python packages in the sandbox
-        
+
         Args:
             sandbox: E2B Sandbox instance
             packages: List of package names to install
-            
+
         Returns:
             bool: True if successful, False otherwise
         """
@@ -53,16 +53,16 @@ class E2BRunner:
         except Exception as e:
             log.error(f"Failed to install packages {packages}: {e}")
             return False
-            
+
     def upload_file_to_e2b(self, sandbox: Sandbox, content: bytes, file_path: str) -> bool:
         """
         Upload a file to the E2B sandbox
-        
+
         Args:
             sandbox: E2B Sandbox instance
             content: File content as bytes
             file_path: Target file path in E2B
-            
+
         Returns:
             bool: True if successful, False otherwise
         """
@@ -270,12 +270,12 @@ class E2BRunner:
             content = sbx.files.read(file_path)
             # Convert string to bytes if needed
             if isinstance(content, str):
-                return content.encode('utf-8')
+                return content.encode("utf-8")
             return content
         except Exception as e:
             log.error(f"Failed to download file {file_path} from E2B: {e}")
             return None
-            
+
     def download_file_from_e2b(self, sandbox: Sandbox, file_path: str) -> Optional[bytes]:
         """
         Download a file from E2B
@@ -291,7 +291,7 @@ class E2BRunner:
             content = sandbox.files.read(file_path)
             # Convert string to bytes if needed
             if isinstance(content, str):
-                return content.encode('utf-8')
+                return content.encode("utf-8")
             return content
         except Exception as e:
             log.error(f"Failed to download file {file_path} from E2B: {e}")
@@ -308,11 +308,9 @@ class E2BRunner:
         Returns:
             bool: True if file exists, False otherwise
         """
-        result = sbx.commands.run(
-            f"test -f {file_path} && echo 'exists' || echo 'not exists'"
-        )
+        result = sbx.commands.run(f"test -f {file_path} && echo 'exists' || echo 'not exists'")
         return result.stdout.strip() == "exists"
-        
+
     def file_exists_in_e2b(self, sandbox: Sandbox, file_path: str) -> bool:
         """
         Public method to check if a file exists in E2B
@@ -347,14 +345,16 @@ class E2BRunner:
             return result
         except Exception as e:
             log.error(f"Failed to run command {command} in E2B: {e}")
+
             # Create a simple result object with the expected properties
             class ErrorResult:
                 def __init__(self):
                     self.stdout = ""
                     self.stderr = f"Error: {str(e)}"
                     self.exit_code = 1
+
             return ErrorResult()
-            
+
     def generate_directory_tree(self, sandbox: Sandbox, directory: str) -> str:
         """
         Generate a tree-like representation of files in an E2B directory
@@ -376,15 +376,15 @@ class E2BRunner:
                 result = sandbox.commands.run(f"find {directory} -type f | sort")
                 if result.exit_code != 0:
                     return f"Error generating directory tree: {result.stderr}"
-                
+
                 files = result.stdout.strip().split("\n")
                 return "\n".join(files)
-                
+
             return result.stdout
         except Exception as e:
             log.error(f"Failed to generate directory tree for {directory}: {e}")
             return f"Error generating directory tree: {str(e)}"
-    
+
     def _generate_directory_tree(self, sbx: Sandbox, directory: str) -> str:
         """
         Generate a tree-like representation of files in an E2B directory

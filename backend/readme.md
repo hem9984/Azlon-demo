@@ -2,50 +2,113 @@
 
 ## Overview
 
-Azlon is a backend system for code generation, validation, and execution. It uses E2B sandboxes for secure code execution and MinIO for file storage. The backend handles code file uploads, code validation, and execution in isolated sandboxes.
+Azlon is a production-ready backend system for code generation, validation, and execution. It leverages Restack cloud for reliable workflow orchestration, E2B sandboxes for secure code execution, and MinIO for file storage. The system seamlessly handles code generation, validation, and execution in isolated environments, providing a robust platform for autonomous coding workflows.
 
-## Architecture
+## System Architecture
 
 The Azlon backend consists of the following key components:
 
-### 1. E2B Sandbox Integration (`e2b_functions.py`)
+### 1. Restack Cloud Workflow Orchestration (`client.py`)
 
-The `E2BRunner` class provides an interface to interact with E2B sandboxes. Key functionalities include:
+The system uses Restack AI's cloud service for reliable workflow orchestration:
 
-- Initializing a sandbox environment
-- Installing packages in the sandbox
-- Uploading and downloading files to/from the sandbox
-- Running commands in the sandbox
-- Generating directory trees for visualization
+- Handles workflow scheduling and execution in the cloud
+- Manages user context and workflow state across activities
+- Provides robust error handling and retry mechanisms
+- Enables scalable execution of complex workflows
 
-### 2. File Handling (`file_handling.py`)
+### 2. E2B Sandbox Integration (`e2b_functions.py`)
 
-The `PreFlightManager` class handles file operations, including:
+The `E2BRunner` class provides an interface to interact with E2B sandboxes for secure code execution:
 
-- Collecting input files from local or remote sources
-- Uploading files to MinIO storage
-- Downloading files from MinIO storage
-- Tracking file dependencies
-- Generating directory trees of files
+- Initializes isolated sandbox environments
+- Installs packages and dependencies
+- Uploads and downloads files to/from the sandbox
+- Executes commands in secure environments
+- Generates directory trees for visualization
 
-### 3. File Server (`file_server.py`)
+### 3. File Handling and Storage
 
-Provides low-level operations for interacting with MinIO/S3 storage:
+#### File Handling (`file_handling.py`)
 
-- Creating buckets
-- Uploading files (from path or buffer)
-- Downloading files (to path or as bytes)
-- Listing files
-- Deleting files
-- Generating directory trees
+The `PreFlightManager` class handles file operations:
 
-### 4. Functions (`functions.py`)
+- Collects input files from local or remote sources
+- Uploads files to MinIO storage
+- Downloads files from MinIO storage
+- Tracks file dependencies and relationships
+- Generates directory trees for visualization
 
-Implements the core business logic of the system, including:
+#### File Server (`file_server.py`)
 
-- Code validation and execution
-- Workflow orchestration
-- Processing inputs and outputs
+Provides low-level operations for MinIO/S3 storage in both local and cloud environments:
+
+- Creates and manages buckets with user isolation
+- Handles file uploads (from path or buffer)
+- Downloads files (to path or as bytes)
+- Lists files with path filtering
+- Deletes files and buckets
+
+### 4. API Server (`main.py`)
+
+The FastAPI server provides HTTP endpoints for frontend integration:
+
+- Handles user authentication and tracking via header (`X-User-ID`)
+- Schedules Restack workflows with user context
+- Retrieves workflow results and file outputs
+- Serves file content and metadata
+
+### 5. Core Business Logic (`functions.py`)
+
+Implements the domain-specific logic including:
+
+- Code generation and validation
+- Test execution and validation
+- Input/output processing
+- Error handling and reporting
+
+## Workflow Process
+
+1. **Request Initiation**: Frontend sends a request to `/run_workflow` with user prompt and test conditions
+2. **User Identification**: System extracts user ID from request headers or payload
+3. **Workflow Scheduling**: Backend schedules a workflow on Restack cloud with unique workflow ID
+4. **File Management**: System manages file storage in MinIO with user-specific buckets
+5. **Secure Execution**: Code runs in isolated E2B sandboxes for security
+6. **Result Retrieval**: Results are stored in MinIO and made available to the frontend
+
+## User ID Management
+
+User identification is critical for proper resource isolation and tracking:
+
+- User IDs come from Firebase authentication in production
+- Each user has isolated storage buckets and workflow instances
+- Workflow IDs follow the pattern: `user-{user_id}-{timestamp}`
+- If no user ID is provided, the system uses "anonymous" as fallback
+
+## Deployment Environments
+
+### Local Development
+
+```
+USE_EXTERNAL_MINIO=false
+```
+
+In local development, the system uses internal Docker networking:
+- MinIO endpoint: `minio:9000`
+- Backend URL: `http://backend:8000`
+
+### Cloud Production
+
+```
+USE_EXTERNAL_MINIO=true
+MINIO_EXTERNAL_ENDPOINT=https://yourinstance.ts.net:8443
+EXTERNAL_BACKEND_URL=https://yourinstance.ts.net
+```
+
+In cloud production, the system uses Tailscale for secure networking:
+- Public MinIO endpoint for file access
+- Public backend URL for API access
+- Restack cloud for workflow processing
 
 ## Environment Requirements
 
@@ -104,6 +167,11 @@ This command:
 - Maps local ports to public endpoints:
   - Backend on port 8000 -> https://muchnic.tail9dec88.ts.net/ (port 443)
   - MinIO on port 9000 -> https://muchnic.tail9dec88.ts.net:8443/ (port 8443)
+
+**Note on MinIO Configuration:**
+- Internal container communication uses: `minio:9000` (Docker service name)
+- External access URL: `https://muchnic.tail9dec88.ts.net:8443/`
+- The backend service is configured to use the internal endpoint
 
 ### 2. Run a Workflow
 

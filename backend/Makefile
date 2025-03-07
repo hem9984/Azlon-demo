@@ -1,4 +1,4 @@
-.PHONY: help install test test-all test-e2b test-file-handling test-file-server test-coverage lint format clean cleanup check all start-server
+.PHONY: help install test test-all test-e2b test-file-handling test-file-server test-coverage lint format clean cleanup check all start-server stop-server
 
 help:
 	@echo "Available commands:"
@@ -14,6 +14,7 @@ help:
 	@echo "  make cleanup           Format and clean code (same as cleanup.sh)"
 	@echo "  make check             Run linting and tests"
 	@echo "  make start-server      Build and start Docker containers with Tailscale"
+	@echo "  make stop-server       Stop Docker containers and cleanup networks"
 	@echo "  make all               Install, format, lint, and test"
 
 install:
@@ -92,5 +93,14 @@ start-server:
 	@echo "==============================================================="
 
 check: lint test-all
+
+stop-server:
+	@echo "=== Stopping Tailscale Funnel services ==="
+	sudo tailscale funnel reset || true
+	@echo "=== Stopping Docker containers and removing networks ==="
+	cd .. && sudo docker compose down --remove-orphans || true
+	@echo "=== Forcefully removing any dangling networks (if any) ==="
+	sudo docker network prune -f || true
+	@echo "\n=== Services successfully stopped ==="
 
 all: install format lint test-all

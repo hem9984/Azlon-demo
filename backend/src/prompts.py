@@ -65,7 +65,7 @@ def get_prompts():
     }
 
 
-def set_prompts(generate_code_prompt: str, validate_output_prompt: str):
-    global current_generate_code_prompt, current_validate_output_prompt
-    current_generate_code_prompt = generate_code_prompt
-    current_validate_output_prompt = validate_output_prompt
+# def set_prompts(generate_code_prompt: str, validate_output_prompt: str):
+#     global current_generate_code_prompt, current_validate_output_prompt
+#     current_generate_code_prompt = generate_code_prompt
+#     current_validate_output_prompt = validate_output_prompt

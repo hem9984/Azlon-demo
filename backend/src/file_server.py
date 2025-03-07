@@ -17,10 +17,22 @@ def get_minio_client():
     """
     Create and return an S3 client configured to use MinIO
     """
-    endpoint_url = os.environ.get("MINIO_ENDPOINT", "minio:9000")
+    # Check if we should use external endpoint (for Restack cloud access)
+    use_external = os.environ.get("USE_EXTERNAL_MINIO", "false").lower() == "true"
+
+    if use_external:
+        # Use the public Tailscale URL for external access
+        endpoint_url = os.environ.get(
+            "MINIO_EXTERNAL_ENDPOINT", "https://muchnic.tail9dec88.ts.net:8443"
+        )
+        use_ssl = True  # External endpoint must use SSL
+    else:
+        # Use internal Docker network for container-to-container communication
+        endpoint_url = os.environ.get("MINIO_ENDPOINT", "minio:9000")
+        use_ssl = os.environ.get("MINIO_USE_SSL", "false").lower() == "true"
+
     access_key = os.environ.get("MINIO_ROOT_USER", "AKIAIOSFODNN7EXAMPLE")
     secret_key = os.environ.get("MINIO_ROOT_PASSWORD", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
-    use_ssl = os.environ.get("MINIO_USE_SSL", "false").lower() == "true"
 
     # Make sure we have http:// or https:// prefix
     if not endpoint_url.startswith("http"):
@@ -57,13 +69,13 @@ def create_bucket_if_not_exists(bucket_name: str) -> bool:
     try:
         # Check if bucket exists by listing all buckets
         response = s3_client.list_buckets()
-        buckets = response.get('Buckets', [])
-        bucket_exists = any(bucket['Name'] == bucket_name for bucket in buckets)
-        
+        buckets = response.get("Buckets", [])
+        bucket_exists = any(bucket["Name"] == bucket_name for bucket in buckets)
+
         if bucket_exists:
             logger.info(f"Bucket {bucket_name} already exists")
             return True
-            
+
         # Bucket doesn't exist, create it
         s3_client.create_bucket(Bucket=bucket_name)
         logger.info(f"Created bucket: {bucket_name}")
@@ -192,7 +204,9 @@ def list_files(bucket_name: str, prefix: str = "") -> List[Dict[str, Any]]:
                 {
                     "key": obj["Key"],
                     "size": obj["Size"],
-                    "modified": obj["LastModified"].isoformat() if hasattr(obj["LastModified"], "isoformat") else str(obj["LastModified"]),
+                    "modified": obj["LastModified"].isoformat()
+                    if hasattr(obj["LastModified"], "isoformat")
+                    else str(obj["LastModified"]),
                     "etag": obj.get("ETag", "").strip('"'),
                 }
             )

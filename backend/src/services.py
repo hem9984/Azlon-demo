@@ -1,4 +1,5 @@
 # ./backend/src/services.py
+# I guess this doesnt do anything now when running on restack cloud?
 import asyncio
 import time
 import traceback
