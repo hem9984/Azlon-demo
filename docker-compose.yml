@@ -150,15 +150,15 @@ services:
   #   volumes:
   #     - ./llm-output:/app/output:rw
 
-  frontend:
-    build: ./frontend
-    depends_on:
-      - backend
-    command: ["npm", "run", "dev"]
-    networks:
-      - restack-network
-    ports:
-      - "8080:8080"
+  # frontend:
+  #   build: ./frontend
+  #   depends_on:
+  #     - backend
+  #   command: ["npm", "run", "dev"]
+  #   networks:
+  #     - restack-network
+  #   ports:
+  #     - "8080:8080"
 
 networks:
   restack-network:
