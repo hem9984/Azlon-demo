@@ -1,18 +1,30 @@
 # ./backend/main.py
 
-from fastapi import FastAPI, HTTPException, Request, Header
+from fastapi import FastAPI, HTTPException, Request, Header, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 import time
 import os
-from typing import List, Optional
+import io
+from typing import List, Optional, Union, Dict, Any
 import glob
 from pathlib import Path
 
 from src.client import client
 from src.prompts import get_prompts
 from restack_ai import Restack
+
+# Import file handling functions
+from src.file_server import (
+    create_workflow_zip,
+    get_workflow_files,
+    download_file,
+    upload_file,
+    extract_and_upload_zip,
+    list_files,
+    create_bucket_if_not_exists
+)
 
 app = FastAPI()
 
@@ -196,3 +208,169 @@ def get_output_file(
         raise HTTPException(status_code=404, detail=f"File not found")
     
     return FileResponse(file_path)
+
+
+@app.get("/workflow_result/{user_id}/{workflow_id}")
+async def get_workflow_result(user_id: str, workflow_id: str, x_user_id: Optional[str] = Header(None)):
+    """
+    Get workflow result files using S3/MinIO
+    This endpoint replaces the backwards compatible endpoints (output_dirs, output_files, output_file)
+    """
+    # Use user ID from path param or header, defaulting to path param
+    effective_user_id = user_id or x_user_id or "anonymous"
+    
+    print(f"Fetching workflow results for user: {effective_user_id}, workflow ID: {workflow_id}")
+    
+    # Create bucket if it doesn't exist
+    bucket_name = os.environ.get("MINIO_BUCKET_NAME", "azlon-files")
+    create_bucket_if_not_exists(bucket_name)
+    
+    # Get files from MinIO
+    files = get_workflow_files(bucket_name, effective_user_id, workflow_id)
+    
+    # Format the response to match the existing output_files endpoint
+    formatted_files = []
+    for file_info in files:
+        key = file_info.get("key", "")
+        filename = key.split("/")[-1] if "/" in key else key
+        extension = os.path.splitext(filename)[1][1:] if "." in filename else ""
+        
+        formatted_files.append({
+            "name": filename,
+            "path": key,  # Full path as S3 key
+            "extension": extension,
+            "size": file_info.get("size", 0)
+        })
+    
+    return formatted_files
+
+
+@app.get("/workflow_file/{user_id}/{workflow_id}/{file_path:path}")
+async def get_workflow_file(
+    user_id: str,
+    workflow_id: str,
+    file_path: str,
+    x_user_id: Optional[str] = Header(None)
+):
+    """
+    Get a specific file from a workflow using S3/MinIO
+    Equivalent to the output_file endpoint but uses MinIO storage
+    """
+    # Use user ID from path param or header, defaulting to path param
+    effective_user_id = user_id or x_user_id or "anonymous"
+    
+    print(f"Fetching file for user: {effective_user_id}, workflow ID: {workflow_id}, file: {file_path}")
+    
+    # Define bucket and object key
+    bucket_name = os.environ.get("MINIO_BUCKET_NAME", "azlon-files")
+    object_key = f"user-{effective_user_id}/{workflow_id}/{file_path}"
+    
+    # Download file content from MinIO
+    file_content = download_file(bucket_name, object_key)
+    
+    if not file_content:
+        raise HTTPException(status_code=404, detail=f"File not found")
+    
+    # Return file with appropriate content type
+    filename = os.path.basename(file_path)
+    content_type = "application/octet-stream"
+    
+    # Set content type based on file extension
+    extension = os.path.splitext(filename)[1].lower()
+    if extension in [".txt", ".md"]:
+        content_type = "text/plain"
+    elif extension == ".json":
+        content_type = "application/json"
+    elif extension == ".html":
+        content_type = "text/html"
+    elif extension == ".css":
+        content_type = "text/css"
+    elif extension == ".js":
+        content_type = "application/javascript"
+    elif extension in [".png", ".jpg", ".jpeg", ".gif"]:
+        content_type = f"image/{extension[1:]}"
+    
+    return Response(content=file_content, media_type=content_type, headers={"Content-Disposition": f"inline; filename={filename}"})
+
+
+@app.get("/workflow_zip/{user_id}/{workflow_id}")
+async def download_workflow_zip(
+    user_id: str,
+    workflow_id: str,
+    x_user_id: Optional[str] = Header(None)
+):
+    """
+    Download all files from a workflow as a zip file
+    """
+    # Use user ID from path param or header, defaulting to path param
+    effective_user_id = user_id or x_user_id or "anonymous"
+    
+    print(f"Creating zip for user: {effective_user_id}, workflow ID: {workflow_id}")
+    
+    # Define bucket
+    bucket_name = os.environ.get("MINIO_BUCKET_NAME", "azlon-files")
+    
+    # Create zip file in memory
+    zip_content, zip_filename = create_workflow_zip(bucket_name, effective_user_id, workflow_id)
+    
+    if not zip_content or not zip_filename:
+        raise HTTPException(status_code=404, detail=f"No files found for workflow {workflow_id}")
+    
+    # Return zip file for download
+    return StreamingResponse(
+        io.BytesIO(zip_content),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename={zip_filename}"
+        }
+    )
+
+
+@app.post("/upload_input/{user_id}")
+async def upload_input_files(
+    user_id: str,
+    file: UploadFile = File(...),
+    x_user_id: Optional[str] = Header(None)
+):
+    """
+    Upload input files for a workflow
+    Handles both regular files and zip files
+    """
+    # Use user ID from path param or header, defaulting to path param
+    effective_user_id = user_id or x_user_id or "anonymous"
+    
+    print(f"Uploading input files for user: {effective_user_id}")
+    
+    # Define bucket
+    bucket_name = os.environ.get("MINIO_BUCKET_NAME", "azlon-files")
+    create_bucket_if_not_exists(bucket_name)
+    
+    # Read file content
+    file_content = await file.read()
+    filename = file.filename or "unnamed_file"
+    content_type = file.content_type or "application/octet-stream"
+    
+    uploaded_files = []
+    
+    # Check if the file is a zip file
+    if filename and filename.lower().endswith(".zip") or content_type == "application/zip":
+        # Handle zip file - extract and upload all files
+        uploaded_files = extract_and_upload_zip(bucket_name, effective_user_id, file_content)
+    else:
+        # Handle regular file - upload directly
+        object_key = f"input/{effective_user_id}/{filename}"
+        
+        if upload_file(file_content, bucket_name, object_key):
+            uploaded_files = [{
+                "filename": filename,
+                "size": len(file_content),
+                "key": object_key
+            }]
+    
+    if not uploaded_files:
+        raise HTTPException(status_code=500, detail="Failed to upload files")
+    
+    return {
+        "message": "Files uploaded successfully",
+        "files": uploaded_files
+    }

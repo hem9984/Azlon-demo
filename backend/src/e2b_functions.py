@@ -73,6 +73,69 @@ class E2BRunner:
             log.error(f"Failed to upload file to {file_path}: {e}")
             return False
 
+    def _download_input_files_to_e2b(
+        self, sandbox: Sandbox, bucket_name: str, user_id: str
+    ) -> bool:
+        """
+        Download input files from MinIO and upload them to E2B sandbox
+
+        Args:
+            sandbox: E2B Sandbox instance
+            bucket_name: MinIO bucket name
+            user_id: User ID
+
+        Returns:
+            bool: True if any files were found and uploaded, False otherwise
+        """
+        # Get list of files from MinIO with input prefix
+        input_prefix = f"input/{user_id}/"
+        try:
+            input_files = list_files(bucket_name, input_prefix)
+            if not input_files:
+                log.info(f"No input files found for {input_prefix} in bucket {bucket_name}")
+                return False
+
+            log.info(
+                f"Found {len(input_files)} input files for {input_prefix} in bucket {bucket_name}"
+            )
+
+            # Create input directory in E2B sandbox
+            sandbox.commands.run("mkdir -p /app/input")
+
+            # Download files from MinIO and upload to E2B
+            for file_info in input_files:
+                object_key = file_info.get("key")
+                if not object_key:  # Skip if key is None or empty
+                    log.warning("Skipping file with no key")
+                    continue
+
+                file_content = download_file(bucket_name, object_key)
+
+                if not isinstance(file_content, bytes):
+                    log.warning(f"Failed to download input file {object_key}")
+                    continue
+
+                # Extract filename from object key
+                filename = (
+                    object_key.split("/")[-1] if object_key and "/" in object_key else object_key
+                )
+                if not filename:  # Skip if filename is None or empty
+                    log.warning(f"Unable to extract filename from {object_key}")
+                    continue
+
+                e2b_path = f"/app/input/{filename}"
+
+                # Upload file to E2B
+                if self.upload_file_to_e2b(sandbox, file_content, e2b_path):
+                    log.info(f"Uploaded input file {filename} to E2B at {e2b_path}")
+                else:
+                    log.warning(f"Failed to upload input file {filename} to E2B")
+
+            return True
+        except Exception as e:
+            log.error(f"Error downloading input files: {e}")
+            return False
+
     def run_docker_container(
         self, user_id: str, run_id: str, bucket_name: str = "azlon-files"
     ) -> Dict[str, Any]:
@@ -116,6 +179,9 @@ class E2BRunner:
 
             # Download files from MinIO and upload to E2B
             self._upload_files_to_e2b(sbx, bucket_name, files)
+
+            # Download input files from MinIO if available
+            self._download_input_files_to_e2b(sbx, bucket_name, user_id)
 
             # Check if Dockerfile exists
             dockerfile_exists = self._file_exists_in_e2b(sbx, "/app/Dockerfile")

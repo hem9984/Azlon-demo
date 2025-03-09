@@ -4,7 +4,9 @@
 import io
 import logging
 import os
-from typing import Any, BinaryIO, Dict, List, Optional, Union
+import zipfile
+from datetime import datetime
+from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union
 
 import boto3
 from botocore.client import Config
@@ -381,3 +383,138 @@ def get_file_metadata(bucket_name: str, object_name: str) -> Dict[str, str]:
     except ClientError as e:
         logger.error(f"Error getting metadata for {object_name} in bucket {bucket_name}: {e}")
         return {}
+
+
+def get_workflow_files(bucket_name: str, user_id: str, workflow_id: str) -> List[Dict[str, Any]]:
+    """
+    Get all files for a specific workflow
+
+    Args:
+        bucket_name: Bucket name
+        user_id: User ID
+        workflow_id: Workflow ID
+
+    Returns:
+        List[Dict]: List of file information dictionaries
+    """
+    if not user_id or not workflow_id:
+        return []
+
+    # Define the prefix for this workflow's files
+    prefix = f"user-{user_id}/{workflow_id}/"
+
+    try:
+        return list_files(bucket_name, prefix)
+    except Exception as e:
+        logger.error(f"Error getting workflow files: {e}")
+        return []
+
+
+def create_workflow_zip(
+    bucket_name: str, user_id: str, workflow_id: str
+) -> Tuple[Optional[bytes], Optional[str]]:
+    """
+    Create a zip file containing all files for a specific workflow
+
+    Args:
+        bucket_name: Bucket name
+        user_id: User ID
+        workflow_id: Workflow ID
+
+    Returns:
+        Tuple[Optional[bytes], Optional[str]]: Zip file content as bytes and filename, or (None, None) if failed
+    """
+    if not user_id or not workflow_id:
+        return None, None
+
+    # Get all files for this workflow
+    files = get_workflow_files(bucket_name, user_id, workflow_id)
+
+    if not files:
+        return None, None
+
+    # Create an in-memory zip file
+    zip_buffer = io.BytesIO()
+
+    try:
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for file_info in files:
+                object_name = file_info.get("key")
+                if not object_name:  # Skip if key is None or empty
+                    continue
+
+                file_content = download_file(bucket_name, object_name)
+
+                if not isinstance(file_content, bytes):
+                    continue
+
+                # Extract just the filename part from the object key
+                filename = (
+                    object_name.split("/")[-1]
+                    if object_name and "/" in object_name
+                    else object_name
+                )
+                if not filename:  # Skip if filename is None or empty
+                    continue
+
+                zip_file.writestr(filename, file_content)
+
+        # Generate a timestamp for the zip filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        zip_filename = f"workflow_{workflow_id}_{timestamp}.zip"
+
+        return zip_buffer.getvalue(), zip_filename
+    except Exception as e:
+        logger.error(f"Error creating workflow zip: {e}")
+        return None, None
+
+
+def extract_and_upload_zip(
+    bucket_name: str, user_id: str, zip_content: bytes
+) -> List[Dict[str, Any]]:
+    """
+    Extract files from a zip and upload them to MinIO under the input prefix
+
+    Args:
+        bucket_name: Bucket name
+        user_id: User ID
+        zip_content: Content of the zip file as bytes
+
+    Returns:
+        List[Dict]: List of information about the uploaded files
+    """
+    if not zip_content or not user_id:
+        return []
+
+    # Create an in-memory zip file from the content
+    zip_buffer = io.BytesIO(zip_content)
+    uploaded_files = []
+
+    try:
+        with zipfile.ZipFile(zip_buffer, "r") as zip_file:
+            # Process each file in the zip
+            for file_info in zip_file.infolist():
+                # Skip directories
+                if file_info.is_dir():
+                    continue
+
+                # Read the file content
+                file_content = zip_file.read(file_info.filename)
+
+                # Create object key with input prefix
+                object_key = f"input/{user_id}/{file_info.filename}"
+
+                # Upload the file to MinIO
+                if upload_file(file_content, bucket_name, object_key):
+                    uploaded_files.append(
+                        {
+                            "filename": file_info.filename,
+                            "size": file_info.file_size,
+                            "key": object_key,
+                        }
+                    )
+
+        return uploaded_files
+    except Exception as e:
+        logger.error(f"Error extracting and uploading zip: {e}")
+        return []

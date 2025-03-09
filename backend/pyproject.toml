@@ -23,6 +23,7 @@ e2b-code-interpreter = "^1.0.5"
 #e2b-cli = "^0.1.9"
 e2b = "^1.1.0"
 boto3 = "^1.37.6"
+python-multipart = "^0.0.20"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.0.0"
