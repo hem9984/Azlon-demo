@@ -35,12 +35,46 @@ class PromptsInput(BaseModel):
     generate_code_prompt: str
     validate_output_prompt: str
 
+def validate_prompt(prompt: str, max_length: int = 8192) -> bool:
+    """Validate a prompt to ensure it meets security requirements."""
+    # Check length
+    if len(prompt) > max_length:
+        return False
+    
+    # Check for prohibited patterns that could lead to prompt injection
+    prohibited_patterns = [
+        "system.process.execute",
+        "ignore previous instructions",
+        "bypass security",
+        "ignore all safeguards",
+        "disregard safety",
+        "override constraints",
+        "delete all files",
+        "format system",
+        "execute arbitrary code"
+    ]
+    
+    for pattern in prohibited_patterns:
+        if pattern.lower() in prompt.lower():
+            return False
+    
+    return True
+
 @app.get("/prompts")
 def fetch_prompts():
     return get_prompts()
 
 @app.post("/prompts")
 def update_prompts(prompts: PromptsInput):
+    # Validate generate_code_prompt
+    if not validate_prompt(prompts.generate_code_prompt):
+        raise HTTPException(status_code=400, detail="Invalid generate_code_prompt: Contains prohibited patterns or exceeds length limit")
+    
+    # Validate validate_output_prompt
+    if not validate_prompt(prompts.validate_output_prompt):
+        raise HTTPException(status_code=400, detail="Invalid validate_output_prompt: Contains prohibited patterns or exceeds length limit")
+    
+    # If validation passes, update prompts
     set_prompts(prompts.generate_code_prompt, prompts.validate_output_prompt)
     return {"status": "updated"}
 
