@@ -3,7 +3,17 @@ import { useToast } from "@/components/ui/use-toast";
 import WorkflowForm from '@/components/WorkflowForm';
 import ResultDisplay from '@/components/ResultDisplay';
 
-const API_URL = "http://localhost:8000";
+// Define API URL based on environment
+// Use HTTP for local development, HTTPS for production
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 
+                (process.env.NODE_ENV === 'development' 
+                 ? "http://localhost:8000"  // Use HTTP for local development
+                 : "https://localhost:8000"); // Use HTTPS in production
+
+// Log warning if using HTTP in production
+if (process.env.NODE_ENV === 'production' && API_URL.startsWith('http:')) {
+  console.warn('Warning: Using insecure HTTP in production environment');
+}
 
 const Index = () => {
   const [userPrompt, setUserPrompt] = useState("");
