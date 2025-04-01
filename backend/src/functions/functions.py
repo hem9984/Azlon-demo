@@ -9,7 +9,7 @@ import subprocess
 from datetime import datetime
 
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from src.prompts import current_generate_code_prompt, current_validate_output_prompt
 
@@ -118,6 +118,90 @@ class GenerateCodeOutput:
     dockerfile: str
     files: list
 
+def validate_generated_code_security(dockerfile: str, files: list) -> Tuple[bool, str]:
+    """
+    Validate the security of generated code and Dockerfile.
+    
+    Args:
+        dockerfile: The generated Dockerfile content
+        files: List of generated code files with their content
+        
+    Returns:
+        tuple: (is_safe, reason)
+            - is_safe: Boolean indicating if the code is safe
+            - reason: Explanation of why the code is unsafe if applicable
+    """
+    # Check Dockerfile for potentially dangerous commands
+    dangerous_docker_commands = [
+        "chmod 777", "--privileged", "sudo", 
+        "curl | bash", "wget | bash", 
+        "VOLUME /", "VOLUME /etc", "VOLUME /var", "VOLUME /bin", "VOLUME /usr",
+        "EXPOSE 22", "COPY id_rsa", "COPY authorized_keys"
+    ]
+    
+    for cmd in dangerous_docker_commands:
+        if cmd in dockerfile:
+            return False, f"Dockerfile contains potentially dangerous command: {cmd}"
+    
+    # Define language-specific patterns
+    python_patterns = [
+        "os.system(", "subprocess.call(", "subprocess.run(", "subprocess.Popen(", 
+        "eval(", "exec(", "__import__(", 
+        "pickle.load(", "marshal.loads(", "yaml.load(", "yaml.unsafe_load(",
+        "shutil.rmtree(", "os.remove(", "os.unlink("
+    ]
+    
+    js_patterns = [
+        "eval(", "Function(", "setTimeout(", "setInterval(", 
+        "require('child_process')", "spawn(", "exec(", 
+        "fs.rmdir(", "fs.unlink("
+    ]
+    
+    # Check files based on their extension
+    for file_item in files:
+        filename = file_item["filename"]
+        content = file_item["content"]
+        
+        # Skip validation for test files and documentation
+        if (filename.startswith("test_") or filename.endswith("_test.py") or 
+            filename.endswith(".md") or filename.endswith(".txt") or 
+            filename == "README.md" or filename == "LICENSE"):
+            continue
+        
+        # Apply language-specific patterns
+        patterns_to_check = []
+        if filename.endswith(".py"):
+            patterns_to_check = python_patterns
+        elif filename.endswith(".js") or filename.endswith(".jsx"):
+            patterns_to_check = js_patterns
+        # Add more language-specific patterns as needed
+        
+        # Check for sensitive paths regardless of file type
+        sensitive_paths = [
+            "/.ssh", "/etc/passwd", "/etc/shadow", "/root/", "/.bash_history"
+        ]
+        
+        for path in sensitive_paths:
+            if path in content:
+                return False, f"File {filename} contains sensitive path: {path}"
+        
+        # Check language-specific patterns
+        for pattern in patterns_to_check:
+            if pattern in content:
+                # Basic context check - could be improved with proper parsing
+                # Check if pattern is in a comment line
+                lines = content.split('\n')
+                for i, line in enumerate(lines):
+                    if pattern in line:
+                        # Skip if line is a comment (simplified check)
+                        if (filename.endswith(".py") and line.strip().startswith("#")) or \
+                           ((filename.endswith(".js") or filename.endswith(".jsx")) and (line.strip().startswith("//") or line.strip().startswith("/*"))):
+                            continue
+                        
+                        return False, f"File {filename} contains potentially dangerous pattern: {pattern}"
+    
+    return True, ""
+
 @function.defn()
 async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
     log.info("generate_code started", input=input)
@@ -127,10 +211,20 @@ async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
         test_conditions=input.test_conditions
     )
 
+    # Enhance the system prompt with specific security instructions
+    system_prompt = (
+        "You are an autonomous coding assistant agent. Generate complete code that will run. "
+        "Follow secure coding practices and avoid using dangerous operations such as: "
+        "- Arbitrary command execution (e.g., os.system, subprocess.call, eval, exec) "
+        "- Unrestricted file operations (e.g., open with write access to sensitive paths) "
+        "- Network access without proper validation "
+        "- Privileged operations in Dockerfiles "
+    )
+
     completion = client.beta.chat.completions.parse(
         model="gpt-4o-2024-08-06",
         messages=[
-            {"role": "system", "content": "You are the initial of an autonomous coding assistant agent. Generate complete code that will run."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ],
         response_format=GenerateCodeSchema
@@ -142,6 +236,11 @@ async def generate_code(input: GenerateCodeInput) -> GenerateCodeOutput:
     data = result.parsed
 
     files_list = [{"filename": f.filename, "content": f.content} for f in data.files]
+    
+    # Validate the generated code for security issues
+    is_safe, reason = validate_generated_code_security(data.dockerfile, files_list)
+    if not is_safe:
+        raise RuntimeError(f"Security validation failed: {reason}")
 
     return GenerateCodeOutput(dockerfile=data.dockerfile, files=files_list)
 
