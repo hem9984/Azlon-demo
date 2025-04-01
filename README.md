@@ -8,12 +8,7 @@ cd Azlon-demo
 echo "OPENAI_KEY=sk-..." > .env
 ```
 ```
-docker compose up --build
-```
-
-## MAKE SURE TO DOCKER COMPOSE DOWN AFTER CLOSING
-```
-docker compose down
+docker compose up
 ```
 
 * Frontend UI: http://localhost:8080/
