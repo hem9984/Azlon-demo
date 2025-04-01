@@ -14,11 +14,13 @@ services:
     image: docker:24-dind
     init: true
     privileged: true
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+    command: ["dockerd", "--host=unix:///var/run/docker.sock", "--host=tcp://127.0.0.1:2375"]
     networks:
       - restack-network
     volumes:
       - ./llm-output:/app/output:rw
+    security_opt:
+      - no-new-privileges=true
 
   backend:
     build: ./backend
