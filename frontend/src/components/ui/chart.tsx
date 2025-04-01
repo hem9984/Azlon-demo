@@ -6,6 +6,20 @@ import { cn } from "@/lib/utils"
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
 
+// Helper function to sanitize CSS identifiers (for property names and IDs)
+const sanitizeCSSIdentifier = (value: string): string => {
+  // Only allow alphanumeric characters, hyphens, and underscores
+  return value.replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+// Helper function to sanitize CSS values (especially for colors)
+const sanitizeCSSValue = (value: string | undefined): string | null => {
+  if (!value) return null;
+  // Remove anything that could potentially break out of the CSS value context
+  // This includes quotes, angle brackets, backslashes, and curly braces
+  return value.replace(/["'<>\\{}]/g, '');
+}
+
 export type ChartConfig = {
   [k in string]: {
     label?: React.ReactNode
@@ -74,20 +88,32 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null
   }
 
+  // Sanitize the chart ID
+  const safeId = sanitizeCSSIdentifier(id);
+
   return (
     <style
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
           .map(
             ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
+${prefix} [data-chart=${safeId}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
+    // Sanitize the property key
+    const safeKey = sanitizeCSSIdentifier(key);
+    
+    // Get the color value from theme or direct color property
     const color =
       itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
-      itemConfig.color
-    return color ? `  --color-${key}: ${color};` : null
+      itemConfig.color;
+    
+    // Sanitize the color value if it exists
+    const safeColor = sanitizeCSSValue(color);
+    
+    return safeColor ? `  --color-${safeKey}: ${safeColor};` : null;
   })
+  .filter(Boolean) // Remove null entries
   .join("\n")}
 }
 `
