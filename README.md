@@ -1,4 +1,4 @@
-####### linkedin: https://www.linkedin.com/in/harrisonmuchnic/
+(: Wanna reach out? https://www.linkedin.com/in/harrisonmuchnic/
 # Autonomous Coding Workflow
 ## TLDR 🔴
 ```
