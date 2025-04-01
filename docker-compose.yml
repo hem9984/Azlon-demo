@@ -12,6 +12,7 @@ services:
 
   docker-dind:
     image: docker:24-dind
+    init: true
     privileged: true
     command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--tls=false"]
     networks:
