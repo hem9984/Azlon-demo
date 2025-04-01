@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y \
 RUN pip install poetry && poetry install --no-root
 
 # Create and ensure permissions for output directory
-RUN mkdir -p /app/output && chmod 777 /app/output
+RUN mkdir -p /app/output && chmod 755 /app/output
 
 # Copy application files
 COPY . /app
