@@ -1,5 +1,8 @@
 # ./backend/src/prompts.py
 
+import re
+import html
+
 # Store defaults here
 default_generate_code_prompt = """You are an autonomous coding agent.
 
@@ -91,13 +94,117 @@ If returning null for dockerfile or files, use JSON null, not a string."""
 current_generate_code_prompt = default_generate_code_prompt
 current_validate_output_prompt = default_validate_output_prompt
 
+def sanitize_input(input_str):
+    """
+    Sanitize user inputs to prevent prompt injection attacks.
+    
+    Args:
+        input_str: String to sanitize
+        
+    Returns:
+        Sanitized string
+    """
+    if input_str is None:
+        return ""
+    
+    # Convert to string if it's not already
+    input_str = str(input_str)
+    
+    # Escape HTML entities to prevent HTML injection
+    input_str = html.escape(input_str)
+    
+    # Remove potential prompt injection patterns
+    # These are patterns that might be used to hijack or manipulate the AI's behavior
+    injection_patterns = [
+        r'ignore previous instructions',
+        r'disregard (all|previous) instructions',
+        r'new instruction:',
+        r'system prompt:',
+        r'you are now',
+        r'forget (all|previous)'
+    ]
+    
+    for pattern in injection_patterns:
+        input_str = re.sub(pattern, "[FILTERED]", input_str, flags=re.IGNORECASE)
+    
+    return input_str
+
+def get_safe_prompts(user_prompt, test_conditions):
+    """
+    Generate safe prompts with sanitized user inputs.
+    
+    Args:
+        user_prompt: User prompt to include in the code generation prompt
+        test_conditions: Test conditions to include in the prompts
+        
+    Returns:
+        Dictionary containing safe prompts
+    """
+    # Sanitize inputs
+    safe_user_prompt = sanitize_input(user_prompt)
+    safe_test_conditions = sanitize_input(test_conditions)
+    
+    # Format the generate code prompt with sanitized inputs
+    safe_generate_code_prompt = current_generate_code_prompt.format(
+        user_prompt=safe_user_prompt,
+        test_conditions=safe_test_conditions
+    )
+    
+    # Do not format validate_output_prompt here as it requires additional parameters
+    
+    return {
+        "generate_code_prompt": safe_generate_code_prompt,
+        "validate_output_prompt": current_validate_output_prompt,
+        "test_conditions": safe_test_conditions  # Keep the sanitized test_conditions for later use
+    }
+
+def format_validate_output_prompt(test_conditions, dockerfile, files_str, output):
+    """
+    Format the validate output prompt with sanitized inputs.
+    
+    Args:
+        test_conditions: Test conditions to include in the prompt
+        dockerfile: Dockerfile content to validate
+        files_str: String representation of files to validate
+        output: Output to validate
+        
+    Returns:
+        Formatted validate output prompt
+    """
+    # Sanitize inputs
+    safe_test_conditions = sanitize_input(test_conditions)
+    safe_dockerfile = sanitize_input(dockerfile)
+    safe_files_str = sanitize_input(files_str)
+    safe_output = sanitize_input(output)
+    
+    # Format the prompt with sanitized inputs
+    return current_validate_output_prompt.format(
+        test_conditions=safe_test_conditions,
+        dockerfile=safe_dockerfile,
+        files_str=safe_files_str,
+        output=safe_output
+    )
+
 def get_prompts():
+    """
+    Get the current prompt templates (not formatted with user inputs).
+    
+    Returns:
+        Dictionary containing the current prompt templates
+    """
     return {
         "generate_code_prompt": current_generate_code_prompt,
         "validate_output_prompt": current_validate_output_prompt
     }
 
-def set_prompts(generate_code_prompt: str, validate_output_prompt: str):
+def set_prompts(generate_code_prompt, validate_output_prompt):
+    """
+    Set new prompt templates.
+    
+    Args:
+        generate_code_prompt: New generate code prompt template
+        validate_output_prompt: New validate output prompt template
+    """
     global current_generate_code_prompt, current_validate_output_prompt
     current_generate_code_prompt = generate_code_prompt
     current_validate_output_prompt = validate_output_prompt
