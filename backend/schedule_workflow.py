@@ -4,6 +4,7 @@ import asyncio
 import time
 from restack_ai import Restack
 from dataclasses import dataclass
+from src.client import client
 
 @dataclass
 class InputParams:
@@ -11,7 +12,6 @@ class InputParams:
     test_conditions: str
 
 async def main():
-    client = Restack()
 
     workflow_id = f"{int(time.time() * 1000)}-AutonomousCodingWorkflow"
     runId = await client.schedule_workflow(
